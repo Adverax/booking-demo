@@ -44,3 +44,23 @@ resolved:
     resolved_by: ADR-0009
     resolution_label: openapi_first_generated_stdlib
     date: 2026-10-21
+  - id: DEC-026
+    question: "Where the cancellation-is-final rule is enforced"
+    resolved_by: ADR-0010
+    resolution_label: schema_guard_on_status
+    date: 2026-10-21
+  - id: DEC-027
+    question: "How a repeated idempotency key is resolved"
+    resolved_by: ADR-0011
+    resolution_label: insert_then_classify_violation
+    date: 2026-10-21
+  - id: DEC-028
+    question: "Write path under concurrent bookings"
+    resolved_by: ADR-0012
+    resolution_label: autocommit_insert_only
+    date: 2026-10-21
+  - id: DEC-032
+    question: "Time representation in storage and the source of the current time"
+    resolved_by: ADR-0013
+    resolution_label: decide_time_storage_and_clock
+    date: 2026-10-21
