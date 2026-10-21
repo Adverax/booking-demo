@@ -81,11 +81,11 @@ links:
     description: "A cancelled booking cannot be reactivated; a new booking is needed"
     capabilities: [CAP-003]
     contexts: [CTX-001]
-    components: [COMP-004, COMP-005]
-    adrs: [ADR-0008]
+    components: [COMP-001, COMP-004, COMP-005]
+    adrs: [ADR-0002, ADR-0003, ADR-0008]
     tests: []
     status: partial
-    notes: "Schema-level protection of INV-004 is open (DEC-026); until decided, COMP-004 is the guard."
+    notes: "Schema-level protection of INV-004 is open (DEC-026); until decided, COMP-004 is the guard. The HTTP-level behaviour (AC-028..AC-030, stable-code error shape) goes through COMP-001."
 
   - req: NFR-001
     description: "50 simultaneous booking requests for one slot yield exactly 1 successful booking"
