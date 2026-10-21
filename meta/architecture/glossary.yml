@@ -4,7 +4,7 @@
 terms:
   - id: TERM-001
     term: Resource
-    definition: A bookable thing of the business (a specialist, a room, a desk) with a name and weekly working hours.
+    definition: "A bookable thing of the business (a specialist, a room, a desk) with a name and weekly working hours. Sameness is defined by the id: two resources are the same resource when their ids are equal (see Slot Identity)."
     context: CTX-001
     aliases: []
     source: [US-001, US-002, US-003]
@@ -16,7 +16,7 @@ terms:
     source: [US-001]
   - id: TERM-003
     term: Slot
-    definition: A 30-minute time interval of a resource, aligned to the half hour; the unit that is booked.
+    definition: "A 30-minute time interval of a resource, aligned to the half hour; the unit that is booked. Sameness is defined by resource id and canonical UTC slot start: two bookings are in the same slot when both are equal (see Slot Identity)."
     context: CTX-001
     aliases: []
     source: [US-004, US-005]
@@ -28,13 +28,13 @@ terms:
     source: [US-004]
   - id: TERM-005
     term: Booking
-    definition: A customer's claim on one slot of a resource, made with a customer name and an idempotency key.
+    definition: "A customer's claim on one slot of a resource, made with a customer name and an idempotency key. Sameness of a repeated request is defined by its payload: it is the same only if resource id, slot start and customer name are equal (see Payload Comparison)."
     context: CTX-001
     aliases: []
     source: [US-005, US-006, US-007]
   - id: TERM-006
     term: Active Booking
-    definition: A booking that has not been cancelled; only active bookings occupy their slot.
+    definition: "A booking that has not been cancelled; only active bookings occupy their slot. Overlap is defined by slot identity: two active bookings overlap only when they are in the same slot (see Slot Identity)."
     context: CTX-001
     aliases: []
     source: [US-004, US-007]
@@ -46,7 +46,7 @@ terms:
     source: [US-007]
   - id: TERM-008
     term: Idempotency Key
-    definition: A caller-supplied key, globally unique across the service, that makes a repeated booking request return the original booking.
+    definition: "A caller-supplied key, globally unique across the service, that makes a repeated booking request return the original booking. Sameness is defined by the exact string: two keys are the same key only if byte for byte equal (see Idempotency Key Comparison)."
     context: CTX-001
     aliases: []
     source: [US-005, US-006]
@@ -58,7 +58,25 @@ terms:
     source: [US-001, US-002]
   - id: TERM-010
     term: Customer
-    definition: The person who books and cancels slots, acting through the studio's frontend, which calls the API on their behalf.
+    definition: "The person who books and cancels slots, acting through the studio's frontend, which calls the API on their behalf. Sameness of the customer is defined by the name string: the same customer name means a byte for byte equal string as received (see Payload Comparison)."
     context: CTX-001
     aliases: []
     source: [US-003, US-004, US-005, US-006, US-007]
+  - id: TERM-011
+    term: Slot Identity
+    definition: "Slot identity is defined by the resource id and the canonical UTC slot start of a Booking: two Resources are the same Resource when their ids are equal, and two bookings occupy the same Slot when both fields are equal, which is the overlap of two Active Bookings."
+    context: CTX-001
+    aliases: [same slot]
+    source: [ADR-0015, ADR-0008, ADR-0013]
+  - id: TERM-012
+    term: Idempotency Key Comparison
+    definition: "Idempotency key comparison is defined by the exact string received: two Idempotency Keys are the same key only if they are byte for byte equal, with no trimming and no case folding (no normalization)."
+    context: CTX-001
+    aliases: [same idempotency key]
+    source: [ADR-0015]
+  - id: TERM-013
+    term: Payload Comparison
+    definition: "Payload comparison is defined by the resource id, the slot start and the Customer name of a booking request: a repeated request has the same payload as the stored Booking only if all three are equal, the name byte for byte as received; any difference is a key conflict."
+    context: CTX-001
+    aliases: [same payload, identical request]
+    source: [ADR-0015, ADR-0001]

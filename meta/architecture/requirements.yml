@@ -3,7 +3,10 @@
 # tier: medium
 functional:
   - id: FR-001
-    statement: An operator creates a resource with a name and weekly working hours.
+    statement: >-
+      An operator creates a resource with a name and weekly working hours. Weekly working hours have at
+      most one interval per weekday; interval bounds are aligned to the half hour and lie inside a
+      single UTC day; resources that violate this are rejected with a stable error code.
     source: [US-001]
     acceptance:
       - id: AC-001
@@ -26,6 +29,35 @@ functional:
         kind: negative
         test: TestCreateResource_RejectsEmptyName
         invariant: INV-005
+      - id: AC-034
+        given: a request with name "Dr. Lee" and two Monday intervals 09:00-12:00 and 13:00-17:00 UTC
+        when: the operator creates the resource
+        then: the response is a 4xx JSON error with a stable code field and nothing is persisted
+        kind: negative
+        test: TestCreateResource_RejectsTwoIntervalsOnOneWeekday
+        invariant: INV-005
+      - id: AC-035
+        given: a request with name "Dr. Lee" and a Monday interval 09:15-17:00 UTC, the start not aligned to the half hour
+        when: the operator creates the resource
+        then: the response is a 4xx JSON error with a stable code field and nothing is persisted
+        kind: boundary
+        test: TestCreateResource_RejectsMisalignedIntervalBound
+        invariant: INV-005
+      - id: AC-036
+        given: a request with name "Dr. Lee" and a Monday interval 22:00-02:00 UTC that crosses midnight
+        when: the operator creates the resource
+        then: the response is a 4xx JSON error with a stable code field and nothing is persisted
+        kind: boundary
+        test: TestCreateResource_RejectsIntervalCrossingMidnightUtc
+        invariant: INV-005
+    clarification:
+      scope: "In: the shape of weekly working hours (ADR-0004) - one interval per weekday, half-hour aligned bounds, inside one UTC day, violations rejected with a stable code. Out: holidays, per-date exceptions, several intervals per day, a lunch break."
+      actors: "Operator (ACT for resource creation) is the only actor whose behaviour changes; Customer and the studio frontend see only the resulting availability."
+      error_alt_paths: "A request with two intervals on one weekday, a misaligned bound or an interval crossing midnight UTC is rejected with a 4xx JSON error carrying a stable code and nothing is persisted (AC-034, AC-035, AC-036)."
+      data: "The weekly working-hours schema of AGG-001 Resource narrows to one interval per weekday; INV-005 states it. No event or ownership change."
+      edge_cases: "Edges: a second interval on the same weekday, a bound off the half hour (09:15), an interval that ends before it starts across midnight (22:00-02:00)."
+      nfr: "No NFR moves; the rule only adds validation and stays inside the existing categories (decision: unchanged)."
+      dependencies: "CAP-001 and trace.yml#FR-001 are in the impact radius; slot derivation of FR-003 gets simpler (one interval check per day); no derivative needs rework now."
   - id: FR-002
     statement: Operators and customers list resources and read a single resource.
     source: [US-002, US-003]
@@ -153,6 +185,13 @@ functional:
         then: the response is a not-found JSON error with a stable code field
         kind: negative
         test: TestBookSlot_UnknownResourceNotFound
+      - id: AC-037
+        given: resources R1 and R2 both open Mon 09:00-10:00 UTC and an active booking of R1 for Monday 09:00
+        when: customer "Bob" books Monday 09:00 of R2 with a new idempotency key
+        then: a booking of R2 for Monday 09:00 is persisted
+        kind: boundary
+        test: TestBookSlot_SameStartOnAnotherResourceIsNotTheSameSlot
+        invariant: INV-001
     engineering_constraints:
       - id: EC-001
         statement: For any set of concurrent booking requests for overlapping slots of one resource, at most one active booking exists afterwards
@@ -160,10 +199,24 @@ functional:
         instances: [AC-019]
         invariant: INV-001
         test: PropertyTest_Booking_NoOverlapUnderConcurrency
+    clarification:
+      scope: "In: the slot-identity relation (ADR-0015) - two bookings occupy the same slot only if resource id and canonical UTC slot start are equal. Out: partial overlaps, which cannot occur with fixed 30-minute slots (ASM-0003)."
+      actors: "Customer, through the studio frontend: bookings of the same start time on different resources no longer interfere."
+      error_alt_paths: "Booking an already occupied slot of the same resource stays a conflict (AC-018); this delta adds no new error path."
+      data: "No data change: the active-slot uniqueness key of ADR-0008 is (resource id, slot start)."
+      edge_cases: "Same start time on two different resources is not an overlap (AC-037)."
+      nfr: "No NFR moves (decision: unchanged); NFR-001 keeps its 50-request criterion."
+      dependencies: "trace.yml#FR-005 and capabilities are in the impact radius; the glossary gains TERM-011 for the slot identity."
   - id: FR-006
     statement: >-
-      Repeating a booking request with the same idempotency key returns the original booking and
-      creates nothing new. The idempotency key is globally unique across the service, not scoped per resource.
+      Repeating a booking request with the same idempotency key and an identical payload (resource id,
+      slot start, customer name) returns the original booking in its current state, also when it has
+      been cancelled, and creates nothing new. Repeating a key with a different resource, slot or
+      customer name is rejected with a stable error code and creates nothing. The idempotency key is
+      globally unique across the service, not scoped per resource. When an insert violates a uniqueness
+      constraint, the outcome is decided by reading the booking stored under the key: same payload
+      returns the original, different payload is the key conflict, no stored booking means the slot was
+      taken. Keys and customer names are compared byte for byte as received.
     source: [US-006]
     acceptance:
       - id: AC-021
@@ -187,23 +240,108 @@ functional:
         kind: concurrency
         test: TestBookSlot_ConcurrentRepeatsYieldOneBooking
         invariant: INV-003
+      - id: AC-038
+        given: a booking for Monday 09:00 by customer "Ann" created with idempotency key K1
+        when: a request repeats key K1 for the same slot with customer name "Bob"
+        then: the response is a key-conflict JSON error with a stable code field
+        kind: negative
+        test: TestBookSlot_RepeatWithDifferentNameIsKeyConflict
+        invariant: INV-003
+      - id: AC-039
+        given: a booking for Monday 09:00 by "Ann" with key K1 and a free Monday 09:30 slot of the same resource
+        when: a request repeats key K1 for Monday 09:30 with name "Ann"
+        then: the response is a key-conflict JSON error and the Monday 09:30 slot stays free
+        kind: negative
+        test: TestBookSlot_RepeatWithDifferentSlotIsKeyConflict
+        invariant: INV-003
+      - id: AC-040
+        given: a booking of resource R1 for Monday 09:00 with key K1 and a free Monday 09:00 slot of resource R2
+        when: a request repeats key K1 for resource R2 at Monday 09:00 with the same name
+        then: the response is a key-conflict JSON error and R2 has 0 bookings
+        kind: negative
+        test: TestBookSlot_RepeatWithDifferentResourceIsKeyConflict
+        invariant: INV-003
+      - id: AC-041
+        given: a booking B1 for Monday 09:00 created with key K1 and then cancelled
+        when: the identical request is repeated with key K1
+        then: the response is B1 with its original id and status cancelled
+        kind: idempotency
+        test: TestBookSlot_RepeatAfterCancelReturnsCancelledOriginal
+        invariant: INV-003
+      - id: AC-042
+        given: a booking B1 for Monday 09:00 created with key K1 and then cancelled
+        when: the identical request is repeated with key K1
+        then: the total number of bookings stays 1 and the Monday 09:00 slot is still listed as free
+        kind: idempotency
+        test: TestBookSlot_RepeatAfterCancelCreatesNoNewBooking
+        invariant: INV-004
+      - id: AC-043
+        given: a booking for Monday 09:00 with key "Key-1" and a free Monday 09:30 slot
+        when: customer "Ann" books Monday 09:30 with key "key-1", differing only by case
+        then: a new booking for Monday 09:30 with a new id is persisted
+        kind: boundary
+        test: TestBookSlot_KeysDifferingOnlyByCaseAreDifferentKeys
+        invariant: INV-003
+      - id: AC-044
+        given: a booking for Monday 09:00 with key "Key-1" and a free Monday 09:30 slot
+        when: customer "Ann" books Monday 09:30 with key "Key-1 ", differing only by a trailing space
+        then: a new booking for Monday 09:30 with a new id is persisted
+        kind: boundary
+        test: TestBookSlot_KeysDifferingOnlyByTrailingSpaceAreDifferentKeys
+        invariant: INV-003
+      - id: AC-045
+        given: a booking for Monday 09:00 by customer "Ann" with key K1
+        when: a request repeats key K1 for the same slot with customer name "ann"
+        then: the response is a key-conflict JSON error with a stable code field
+        kind: boundary
+        test: TestBookSlot_CustomerNameComparisonIsCaseSensitive
+        invariant: INV-003
+      - id: AC-046
+        given: a booking for Monday 09:00 by customer "Ann" with key K1
+        when: a request repeats key K1 for the same slot with customer name "Ann " with a trailing space
+        then: the response is a key-conflict JSON error with a stable code field
+        kind: boundary
+        test: TestBookSlot_CustomerNameComparisonDoesNotTrim
+        invariant: INV-003
+      - id: AC-047
+        given: an active booking for Monday 09:00 stored under key K1
+        when: another request with a new key K2 books the same slot
+        then: the response is a slot-taken conflict JSON error and no booking is stored under key K2
+        kind: negative
+        test: TestBookSlot_SlotTakenStoresNothingUnderNewKey
+        invariant: INV-001
     engineering_constraints:
       - id: EC-002
-        statement: A booking request repeated with the same idempotency key, in any number and at any time, never creates a second booking
+        statement: A booking request repeated with the same idempotency key and an identical payload (same resource id, slot start and customer name), in any number and at any time, never creates a second booking and returns the original
         kind: idempotency
         instances: [AC-021, AC-022]
         invariant: INV-003
         test: PropertyTest_Booking_IdempotentUnderRetry
       - id: EC-003
-        statement: For any number of simultaneous requests sharing one idempotency key, exactly one booking is created and every response carries its id
+        statement: For any number of simultaneous requests sharing one idempotency key and an identical payload, exactly one booking is created and every response carries its id
         kind: concurrency
         instances: [AC-023]
         invariant: INV-003
         test: PropertyTest_Booking_ConcurrentSameKeyYieldsOneBooking
+      - id: EC-004
+        statement: A request that repeats an existing idempotency key with any differing resource id, slot start or customer name never creates a booking and never changes the stored one
+        kind: idempotency
+        instances: [AC-038, AC-039, AC-040]
+        invariant: INV-003
+        test: PropertyTest_Booking_KeyReuseWithDifferentPayloadCreatesNothing
+    clarification:
+      scope: "In: repeats of a key with a different payload (ADR-0001), repeats after cancellation (ADR-0002), the read-after-violation classification (ADR-0011), exact string comparison (ADR-0015); the identical-payload repeat is the only repeat that returns the original. Out: the order against the not-in-the-past check (DEC-012), empty or oversized keys (DEC-016), further concurrency scenarios (DEC-017)."
+      actors: "Customer, through the studio frontend: a retry must resend the same key, resource, slot and name, and a new booking intent after a cancel needs a new key."
+      error_alt_paths: "Different name, slot or resource under an existing key is a key-conflict error with a stable code and creates nothing (AC-038, AC-039, AC-040); a taken slot under a new key is a slot-taken conflict (AC-047); a repeat after cancel returns the cancelled original (AC-041, AC-042)."
+      data: "No new fields; keys of cancelled bookings are kept forever (ADR-0002) and the key stays unique across all bookings, active or cancelled (ADR-0008)."
+      edge_cases: "Keys differing only by case or trailing space are different keys (AC-043, AC-044); names differing only by case or trailing space are a payload mismatch (AC-045, AC-046)."
+      nfr: "No NFR moves (decision: unchanged); the extra read after a violation touches no stated threshold."
+      dependencies: "CAP-003 and trace.yml#FR-006 are the impact radius; INV-003, EC-002, EC-003 reworded and TERM-008 neighbours TERM-011..013 added; the key-conflict error code is chosen when the API is specified."
   - id: FR-007
     statement: >-
       A booking can be cancelled by anyone who knows its booking id; the service does not verify
-      identity. A cancelled booking frees its slot immediately.
+      identity. A cancelled booking frees its slot immediately. Cancelling an already cancelled
+      booking succeeds and returns the cancelled booking.
     source: [US-007]
     acceptance:
       - id: AC-024
@@ -230,8 +368,30 @@ functional:
         then: the response is a not-found JSON error with a stable code field
         kind: negative
         test: TestCancelBooking_UnknownIdNotFound
+      - id: AC-048
+        given: a booking B1 that was already cancelled
+        when: B1 is cancelled again by its id
+        then: the response is a success carrying B1 with its original id and status cancelled
+        kind: idempotency
+        test: TestCancelBooking_RepeatedCancelReturnsCancelledBooking
+    engineering_constraints:
+      - id: EC-005
+        statement: Cancelling a booking any number of times leaves it cancelled and returns it as a success every time
+        kind: idempotency
+        instances: [AC-048]
+        test: PropertyTest_Booking_RepeatedCancelIsIdempotent
+    clarification:
+      scope: "In: a second cancel of an already cancelled booking (ADR-0003). Out: any change to who may cancel (CON-006) or to the cancel rule for active bookings."
+      actors: "Customer, through the studio frontend: a retried cancel behaves like the first one and needs no special case."
+      error_alt_paths: "A repeated cancel is a success returning the cancelled booking (AC-048); an unknown id stays not-found (AC-027)."
+      data: "No data change: the booking stays cancelled, nothing is reactivated."
+      edge_cases: "The boundary is the second cancel of the same id; a third and later cancel behave the same (EC-005)."
+      nfr: "No NFR moves (decision: unchanged)."
+      dependencies: "CAP and trace.yml#FR-007 are in the impact radius; the response shape of a repeated cancel equals the first cancel response."
   - id: FR-008
-    statement: A cancelled booking cannot be reactivated; a new booking is needed.
+    statement: >-
+      A cancelled booking cannot be reactivated; a new booking is needed. The storage layer rejects
+      the transition from cancelled back to active, not only the domain code.
     source: [US-007]
     acceptance:
       - id: AC-028
@@ -255,6 +415,21 @@ functional:
         kind: negative
         test: TestBooking_CannotReactivate
         invariant: INV-004
+      - id: AC-049
+        given: a cancelled booking B1 for Monday 09:00 whose slot has no active booking
+        when: a statement updates the status of B1 to active directly in the database
+        then: the update is aborted by the schema and B1 status stays cancelled
+        kind: negative
+        test: TestSchema_RejectsCancelledToActiveTransition
+        invariant: INV-004
+    clarification:
+      scope: "In: enforcing cancelled-is-final in the schema (ADR-0010) besides the domain guard. Out: any public route that reactivates a booking (none exists, ASM-0001)."
+      actors: "No actor sees a change: no endpoint reactivates a booking; the rule is a storage-level guard."
+      error_alt_paths: "An update cancelled-to-active is aborted by the schema and mapped to a stable error (AC-049, AC-030)."
+      data: "The booking status column gains a schema guard (trigger) in a versioned migration (ADR-0007); no new field."
+      edge_cases: "The edge is a cancelled booking whose slot is free, where only the guard, not the active-slot index, stops the update (AC-049)."
+      nfr: "No NFR moves (decision: unchanged)."
+      dependencies: "AGG-002 INV-004, trace.yml#FR-008 and the migration set (ADR-0007) are in the impact radius; ASM-0001 is mostly settled by the storage-level test."
 
 non_functional:
   - id: NFR-001
@@ -351,3 +526,19 @@ constraints:
     type: organizational
     statement: No authentication; the service runs behind the studio's own gateway.
     source: design brief, 2026-10-21
+  - id: CON-007
+    type: technical
+    statement: The booking write path uses single autocommit statements and no transaction that reads and then writes.
+    source: ADR-0012, 2026-10-21
+    scope:
+      contexts: [CTX-001]
+    check:
+      kind: review-lens
+  - id: CON-008
+    type: technical
+    statement: Instants are stored as integer UTC epoch seconds and converted to RFC 3339 only at the API boundary; the current time is obtained through an injectable clock.
+    source: ADR-0013, 2026-10-21
+    scope:
+      contexts: [CTX-001]
+    check:
+      kind: review-lens

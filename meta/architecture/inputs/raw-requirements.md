@@ -38,12 +38,21 @@
 - A concurrency test sends 50 simultaneous booking requests for the same slot and exactly one succeeds (NFR, release criterion). Source: brief, 2026-10-21.
 # processed: 2026-10-21 → NFR-003
 - Every rule above is covered by at least one named test (NFR, release criterion). Source: brief, 2026-10-21.
+# processed: 2026-10-21 → FR-006 (AC-038..AC-040, EC-004)
 - A booking request that repeats an existing idempotency key with a different resource, slot or customer name is rejected with a stable error code and creates nothing (FR, invariant). Source: ADR-0001, 2026-10-21.
+# processed: 2026-10-21 → FR-006 (AC-041, AC-042)
 - A booking request that repeats the idempotency key of a cancelled booking returns that booking with status cancelled and creates no new booking; a new booking needs a new key (FR, invariant). Source: ADR-0002, 2026-10-21.
+# processed: 2026-10-21 → FR-007 (AC-048, EC-005)
 - Cancelling an already cancelled booking succeeds and returns the cancelled booking (FR). Source: ADR-0003, 2026-10-21.
+# processed: 2026-10-21 → FR-001 (AC-034..AC-036), INV-005
 - Weekly working hours have at most one interval per weekday; interval bounds are aligned to the half hour and lie inside a single UTC day; resources that violate this are rejected with a stable error code (FR). Source: ADR-0004, 2026-10-21.
+# processed: 2026-10-21 → FR-008 (AC-049), INV-004
 - A cancelled booking is never set active again; the storage layer rejects the transition, not only the domain code (FR, invariant). Source: ADR-0010, 2026-10-21.
+# processed: 2026-10-21 → FR-006 (AC-039, AC-047)
 - When a booking insert violates a uniqueness constraint, the outcome is decided by reading the booking stored under the idempotency key: same payload returns the original booking, different payload is the key conflict, no stored booking means the slot was taken (FR). Source: ADR-0011, 2026-10-21.
+# processed: 2026-10-21 → CON-007
 - The booking write path uses single autocommit statements and no transaction that reads and then writes (CON). Source: ADR-0012, 2026-10-21.
+# processed: 2026-10-21 → CON-008
 - Instants are stored as integer UTC epoch seconds, converted to RFC 3339 only at the API boundary; the current time is obtained through an injectable clock (CON). Source: ADR-0013, 2026-10-21.
+# processed: 2026-10-21 → FR-006 (AC-043..AC-046), FR-005 (AC-037), TERM-011..TERM-013
 - Sameness: two resources are the same if their ids are equal; two bookings occupy the same slot if resource id and canonical slot start are equal; idempotency keys and customer names are compared byte for byte as received, with no trimming and no case folding; a repeated request has the same payload as the stored booking only if resource id, slot start and customer name are all equal (FR, invariant). Source: ADR-0015, 2026-10-21.

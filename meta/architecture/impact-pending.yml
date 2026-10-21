@@ -1,0 +1,82 @@
+version: 1
+entries:
+- id: FR-001
+  at: '2026-10-21T16:30:00Z'
+  commit: baaa976
+  commit_reason: ok
+  radius_count: 2
+  radius:
+  - id: CAP-001
+    kind: capability
+    artifact: meta/architecture/domain/capabilities.yml
+    field: 'requirements[0]: FR-001'
+  - id: trace.yml#FR-001
+    kind: trace_entry
+    artifact: meta/architecture/trace.yml
+    field: 'req: FR-001'
+  sources_absent:
+  - meta/kanban/cards
+- id: FR-005
+  at: '2026-10-21T16:30:00Z'
+  commit: baaa976
+  commit_reason: ok
+  radius_count: 2
+  radius:
+  - id: CAP-003
+    kind: capability
+    artifact: meta/architecture/domain/capabilities.yml
+    field: 'requirements[0]: FR-005'
+  - id: trace.yml#FR-005
+    kind: trace_entry
+    artifact: meta/architecture/trace.yml
+    field: 'req: FR-005'
+  sources_absent:
+  - meta/kanban/cards
+- id: FR-006
+  at: '2026-10-21T16:30:00Z'
+  commit: baaa976
+  commit_reason: ok
+  radius_count: 2
+  radius:
+  - id: CAP-003
+    kind: capability
+    artifact: meta/architecture/domain/capabilities.yml
+    field: 'requirements[1]: FR-006'
+  - id: trace.yml#FR-006
+    kind: trace_entry
+    artifact: meta/architecture/trace.yml
+    field: 'req: FR-006'
+  sources_absent:
+  - meta/kanban/cards
+- id: FR-007
+  at: '2026-10-21T16:30:00Z'
+  commit: baaa976
+  commit_reason: ok
+  radius_count: 2
+  radius:
+  - id: CAP-003
+    kind: capability
+    artifact: meta/architecture/domain/capabilities.yml
+    field: 'requirements[2]: FR-007'
+  - id: trace.yml#FR-007
+    kind: trace_entry
+    artifact: meta/architecture/trace.yml
+    field: 'req: FR-007'
+  sources_absent:
+  - meta/kanban/cards
+- id: FR-008
+  at: '2026-10-21T16:30:00Z'
+  commit: baaa976
+  commit_reason: ok
+  radius_count: 2
+  radius:
+  - id: CAP-003
+    kind: capability
+    artifact: meta/architecture/domain/capabilities.yml
+    field: 'requirements[3]: FR-008'
+  - id: trace.yml#FR-008
+    kind: trace_entry
+    artifact: meta/architecture/trace.yml
+    field: 'req: FR-008'
+  sources_absent:
+  - meta/kanban/cards

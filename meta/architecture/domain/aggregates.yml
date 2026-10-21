@@ -7,7 +7,7 @@ aggregates:
     description: A bookable resource with its name and weekly working hours.
     invariants:
       - id: INV-005
-        statement: A resource always has a name and a weekly working-hours schedule.
+        statement: A resource always has a name and a weekly working-hours schedule with at most one interval per weekday, each interval bound aligned to the half hour and inside a single UTC day.
   - id: AGG-002
     name: Booking
     description: A customer's claim on one 30-minute slot of a resource; active until cancelled.
@@ -17,6 +17,6 @@ aggregates:
       - id: INV-002
         statement: A booking is accepted only for a slot inside the resource's working hours and not in the past.
       - id: INV-003
-        statement: Repeating a booking request with the same idempotency key returns the original booking and creates nothing new; the key is unique across the whole service.
+        statement: Repeating a booking request with the same idempotency key and an identical payload (resource id, slot start, customer name) returns the original booking in its current state and creates nothing new; the same key with a different payload is rejected as a key conflict; the key is unique across the whole service.
       - id: INV-004
-        statement: A cancelled booking is final and cannot be reactivated; a new booking is needed.
+        statement: A cancelled booking is final and cannot be reactivated, and the schema rejects the transition from cancelled to active as well as the domain code; a new booking is needed.

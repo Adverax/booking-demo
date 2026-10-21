@@ -13,10 +13,10 @@ links:
     capabilities: [CAP-001]
     contexts: [CTX-001]
     components: [COMP-001, COMP-002, COMP-005]
-    adrs: [ADR-0004, ADR-0009]
+    adrs: [ADR-0004, ADR-0009, ADR-0014]
     tests: []
     status: partial
-    notes: "Malformed working-hours acceptance criteria under ADR-0004 are open (DEC-013)."
+    notes: "Malformed working-hours acceptance criteria under ADR-0004 are mirrored as AC-034..AC-036 (ADR-0014, DEC-013 resolved)."
 
   - req: FR-002
     description: "Operators and customers list resources and read a single resource"
@@ -52,23 +52,23 @@ links:
     capabilities: [CAP-003]
     contexts: [CTX-001]
     components: [COMP-001, COMP-002, COMP-004, COMP-005]
-    adrs: [ADR-0006, ADR-0008, ADR-0009]
+    adrs: [ADR-0006, ADR-0008, ADR-0009, ADR-0015]
     tests: []
     status: partial
     notes: "Open: meaning of 'in the past' (DEC-005), busy-error handling under concurrent writers (DEC-028), cancel-vs-book race coverage (DEC-017)."
 
   - req: FR-006
-    description: "Repeating a booking with the same idempotency key returns the original booking; key is globally unique"
+    description: "Repeating a booking with the same idempotency key and identical payload returns the original booking, also when cancelled; a differing payload is a key conflict; key is globally unique and compared exactly"
     capabilities: [CAP-003]
     contexts: [CTX-001]
     components: [COMP-001, COMP-004, COMP-005]
-    adrs: [ADR-0001, ADR-0002, ADR-0008]
+    adrs: [ADR-0001, ADR-0002, ADR-0008, ADR-0011, ADR-0015]
     tests: []
     status: partial
-    notes: "Open: replay resolution against the two unique indexes (DEC-027), key lookup before past-slot validation (DEC-012), event re-emission on no-op (DEC-014)."
+    notes: "Replay resolution against the two unique indexes is insert-then-classify (ADR-0011, DEC-027 resolved). Open: key lookup before past-slot validation (DEC-012), event re-emission on no-op (DEC-014)."
 
   - req: FR-007
-    description: "Anyone with the booking id can cancel; a cancelled booking frees its slot immediately"
+    description: "Anyone with the booking id can cancel; a cancelled booking frees its slot immediately; a repeated cancel succeeds"
     capabilities: [CAP-003]
     contexts: [CTX-001]
     components: [COMP-001, COMP-003, COMP-004, COMP-005]
@@ -78,14 +78,14 @@ links:
     notes: "Mitigation for leaked booking ids is open (DEC-011)."
 
   - req: FR-008
-    description: "A cancelled booking cannot be reactivated; a new booking is needed"
+    description: "A cancelled booking cannot be reactivated; a new booking is needed; the storage layer rejects the transition"
     capabilities: [CAP-003]
     contexts: [CTX-001]
-    components: [COMP-001, COMP-004, COMP-005]
-    adrs: [ADR-0002, ADR-0003, ADR-0008]
+    components: [COMP-001, COMP-004, COMP-005, COMP-006]
+    adrs: [ADR-0002, ADR-0003, ADR-0008, ADR-0010]
     tests: []
     status: partial
-    notes: "Schema-level protection of INV-004 is open (DEC-026); until decided, COMP-004 is the guard. The HTTP-level behaviour (AC-028..AC-030, stable-code error shape) goes through COMP-001."
+    notes: "INV-004 is guarded in COMP-004 and by a schema guard delivered as a versioned migration through COMP-006 (ADR-0010, DEC-026 resolved; AC-049). The HTTP-level behaviour (AC-028..AC-030, stable-code error shape) goes through COMP-001."
 
   - req: NFR-001
     description: "50 simultaneous booking requests for one slot yield exactly 1 successful booking"
@@ -165,6 +165,22 @@ links:
     tests: []
     status: covered
     notes: "No authentication component by design; booking-id exposure is open (DEC-011)."
+
+  - req: CON-007
+    description: "The booking write path uses single autocommit statements and no read-then-write transaction"
+    contexts: [CTX-001]
+    components: [COMP-004, COMP-005]
+    adrs: [ADR-0012]
+    tests: []
+    status: covered
+
+  - req: CON-008
+    description: "Instants stored as integer UTC epoch seconds, RFC 3339 only at the API boundary; current time from an injectable clock"
+    contexts: [CTX-001]
+    components: [COMP-001, COMP-003, COMP-004, COMP-005]
+    adrs: [ADR-0013]
+    tests: []
+    status: covered
 
 components:
   - id: COMP-001
