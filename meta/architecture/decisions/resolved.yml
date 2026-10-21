@@ -19,3 +19,28 @@ resolved:
     resolved_by: ADR-0004
     resolution_label: single_interval_per_day
     date: 2026-10-21
+  - id: DEC-021
+    question: "Where and how the one binary runs (platform baseline, runtime axis)"
+    resolved_by: ADR-0005
+    resolution_label: bare_binary_supervised
+    date: 2026-10-21
+  - id: DEC-022
+    question: "Which pure-Go SQLite driver backs the store"
+    resolved_by: ADR-0006
+    resolution_label: modernc_sqlite
+    date: 2026-10-21
+  - id: DEC-023
+    question: "How the SQLite schema is created and evolved"
+    resolved_by: ADR-0007
+    resolution_label: embedded_migrations_on_startup
+    date: 2026-10-21
+  - id: DEC-024
+    question: "How no double booking and key uniqueness are enforced under concurrency"
+    resolved_by: ADR-0008
+    resolution_label: unique_index_on_active_slot
+    date: 2026-10-21
+  - id: DEC-025
+    question: "How the HTTP layer is built on net/http"
+    resolved_by: ADR-0009
+    resolution_label: openapi_first_generated_stdlib
+    date: 2026-10-21

@@ -1,0 +1,17 @@
+# generated_by: architect-adr-writer
+# generated_at: 2026-10-21T00:00:00Z
+# tier: medium
+platform:
+  stack:
+    value: "Go 1.26 + net/http + SQLite (modernc.org/sqlite, pure Go, no cgo)"
+    label: go_net_http_sqlite
+    decided_by: ADR-0006
+    status: confirmed
+  style:
+    value: "single-process monolith, one binary, synchronous JSON-over-HTTP API"
+    decided_by: CON-005
+    status: confirmed
+  runtime:
+    value: "statically linked binary under an OS supervisor (systemd), environment file, SQLite on local disk"
+    decided_by: ADR-0005
+    status: default_accepted
