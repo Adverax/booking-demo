@@ -1,0 +1,526 @@
+openapi: 3.0.3
+# Contract of the booking service (COMP-001, ADR-0009): written first, the Go types and the
+# net/http server interface in internal/httpapi are generated from it (`go generate ./internal/httpapi`).
+#
+# TODO(DEC-030): whether ADR-0009's rejection of hand-written handlers is restated on the drift
+# argument is open. It does not reopen the decision: this document stays the contract and the
+# server code is generated from it.
+info:
+  title: Booking Service API
+  version: 0.1.0
+  description: |
+    Resources with weekly working hours, their free 30-minute slots, and bookings of one slot
+    with an idempotency key. JSON over HTTP; no authentication, the service runs behind the
+    studio's gateway (CON-006).
+
+    **Time.** All instants cross the boundary as RFC 3339 strings in UTC (CON-001, CON-008).
+    Responses always carry the `Z` suffix. A request instant with another offset denotes the same
+    instant and is normalised to UTC by the service. Calendar dates are `YYYY-MM-DD` UTC days and
+    times of day are `HH:MM` in UTC.
+
+    **Errors.** Every error response is a JSON object with a stable `code` field (CON-004). The
+    codes are declared once, in the `ErrorCode` schema below; `message` is human-readable and not
+    part of the contract. Besides the responses declared per operation, any request may get:
+    `404 not_found` for an unknown path, `405 method_not_allowed` for a known path with a method it
+    does not serve, and `500 internal_error` for an unexpected failure.
+
+    **Constraints.** Schema keywords (`minLength`, `pattern`, `enum`, ...) declare the input rules
+    to the consumer; the service enforces the same rules and answers a violation with
+    `400 validation_error`. Rules that no schema keyword can express are stated on the operation.
+servers:
+  - url: /
+tags:
+  - name: resources
+    description: Resources and their weekly working hours (FR-001, FR-002).
+  - name: availability
+    description: Free slots of a resource (FR-003, FR-004).
+  - name: bookings
+    description: Booking and cancelling one slot (FR-005..FR-008).
+
+paths:
+  /resources:
+    post:
+      tags: [resources]
+      operationId: createResource
+      summary: Create a resource with weekly working hours
+      description: |
+        Creates a resource with a non-empty name and weekly working hours (FR-001, ADR-0004).
+        The working hours hold at most one interval per weekday; both bounds are aligned to the
+        half hour; each interval lies inside a single UTC day, so its end is after its start (an
+        interval such as 22:00-02:00 crossing midnight is rejected). A missing or empty schedule,
+        an empty name, a second interval on one weekday, a misaligned bound or an end not after
+        its start is answered with `400 validation_error` and nothing is stored.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateResourceRequest'
+      responses:
+        '201':
+          description: The resource was created and is returned with its generated id.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Resource'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '413':
+          $ref: '#/components/responses/RequestTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags: [resources]
+      operationId: listResources
+      summary: List all resources
+      description: Returns every resource (FR-002).
+      responses:
+        '200':
+          description: All resources.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceList'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /resources/{resourceId}:
+    get:
+      tags: [resources]
+      operationId: getResource
+      summary: Read one resource
+      description: Returns the name and weekly working hours of one resource (FR-002).
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: The resource.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Resource'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /resources/{resourceId}/availability:
+    get:
+      tags: [availability]
+      operationId: getAvailability
+      summary: List the free slots of a resource over a date range
+      description: |
+        Returns the free slots of the resource for the UTC days `from` through `to`, both
+        inclusive (FR-003, FR-004). A slot is 30 minutes long, starts on the half hour, lies inside
+        the resource's working hours and does not overlap an active booking; cancelled bookings do
+        not occupy their slot.
+
+        The range covers at most 14 days, counting both ends: `from` = 2026-11-02 with
+        `to` = 2026-11-15 is the longest range starting on 2026-11-02, and `to` = 2026-11-16
+        (15 days) is rejected. A range whose `from` is after its `to` is rejected as well; schema
+        keywords cannot express either rule, so they are stated here. Both are answered with
+        `400 validation_error` before any booking is read.
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+        - name: from
+          in: query
+          required: true
+          description: First UTC day of the range, inclusive. Must not be after `to`.
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: true
+          description: Last UTC day of the range, inclusive. At most 13 days after `from`.
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: The free slots of the range, ordered by start.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Availability'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /bookings:
+    post:
+      tags: [bookings]
+      operationId: bookSlot
+      summary: Book one slot of a resource
+      description: |
+        Books the 30-minute slot of `resourceId` that starts at `slotStart` for `customerName`,
+        under the caller's `idempotencyKey` (FR-005, FR-006).
+
+        **Validation.** An empty `customerName` or an empty `idempotencyKey`, or a `slotStart` not
+        on the half hour, is answered with `400 validation_error` and nothing is stored. Keys and
+        names are taken byte for byte as received: no trimming, no case folding (ADR-0015).
+
+        **Idempotency.** The key is unique across the whole service. A request whose key is
+        already stored is resolved from the stored booking, whatever its current status:
+        - same payload (same `resourceId`, same `slotStart` instant, byte-equal `customerName`):
+          `200` with the original booking in its current state, also when it was cancelled; nothing
+          new is created (FR-006, ADR-0002);
+        - any difference in that payload: `409 idempotency_key_conflict`; nothing is created or
+          changed (ADR-0001).
+
+        **Slots.** A request whose key is not stored creates a booking (`201`) only when the slot
+        lies inside the resource's working hours (otherwise `422 slot_outside_working_hours`), is
+        not in the past, and has no active booking (otherwise `409 slot_taken`).
+
+        **Past slots** (ADR-0016, ADR-0020). A slot is in the past when its start is earlier than
+        the current time; a slot whose start equals the current time is accepted. For a slot
+        that has already started, the stored key is looked up first:
+        - key stored, same payload: `200` with the original booking, not a past-slot error;
+        - key stored, different payload: `409 idempotency_key_conflict`, not `slot_in_past`;
+        - key not stored: `422 slot_in_past`, and nothing is stored under the key.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookSlotRequest'
+      responses:
+        '200':
+          description: |
+            Replay: the key is already stored with the same payload. The original booking is
+            returned in its current state (`active` or `cancelled`) and nothing new is created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+        '201':
+          description: The slot was booked; the new booking is returned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: |
+            `slot_taken`: the slot has an active booking under another key (INV-001), and nothing
+            is stored under this key.
+            `idempotency_key_conflict`: the key is stored with a different resource, slot start or
+            customer name (ADR-0001), also for a slot that has already started (ADR-0020).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '413':
+          $ref: '#/components/responses/RequestTooLarge'
+        '422':
+          description: |
+            `slot_outside_working_hours`: the slot is not inside the resource's working hours.
+            `slot_in_past`: the slot starts before the current time and no booking is stored under
+            the key (ADR-0016, ADR-0020).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /bookings/{bookingId}:
+    get:
+      tags: [bookings]
+      operationId: getBooking
+      summary: Read one booking
+      description: Returns the booking in its current state, including a cancelled one (AC-029).
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+      responses:
+        '200':
+          description: The booking.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /bookings/{bookingId}/cancel:
+    post:
+      tags: [bookings]
+      operationId: cancelBooking
+      summary: Cancel a booking
+      description: |
+        Cancels the booking; anyone who knows its id may do so, no identity is checked (FR-007,
+        CON-006). The slot is free again at once. Cancelling an already cancelled booking succeeds
+        and returns the same cancelled booking (ADR-0003). A cancelled booking is final: no
+        operation sets it active again (FR-008, ADR-0010).
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+      responses:
+        '200':
+          description: The cancelled booking.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+components:
+  parameters:
+    ResourceId:
+      name: resourceId
+      in: path
+      required: true
+      description: Id of the resource, as returned when it was created.
+      schema:
+        $ref: '#/components/schemas/ResourceId'
+    BookingId:
+      name: bookingId
+      in: path
+      required: true
+      description: Id of the booking, as returned when it was created.
+      schema:
+        $ref: '#/components/schemas/BookingId'
+
+  responses:
+    ValidationError:
+      description: '`validation_error`: the request violates a declared input rule; nothing is stored.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: '`not_found`: the resource or booking named by the request does not exist.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    RequestTooLarge:
+      description: '`request_too_large`: the request body exceeds the size the service reads; nothing is stored.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    InternalError:
+      description: '`internal_error`: an unexpected failure; the request may not have taken effect.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    ResourceId:
+      type: string
+      minLength: 1
+      description: Opaque resource identifier; clients must not parse it.
+
+    BookingId:
+      # TODO(DEC-011): whether booking ids must be unguessable (a leaked id lets anyone cancel,
+      # CON-006) is open. The contract declares them opaque strings and promises nothing about
+      # their format or guessability.
+      type: string
+      minLength: 1
+      description: Opaque booking identifier; clients must not parse it.
+
+    Weekday:
+      type: string
+      enum: [monday, tuesday, wednesday, thursday, friday, saturday, sunday]
+
+    WorkingInterval:
+      type: object
+      description: |
+        The working interval of one weekday, in UTC (ADR-0004). Both bounds are on the half hour
+        and `end` is after `start`, so the interval lies inside one UTC day; `24:00` as `end`
+        denotes the end of that day.
+      required: [weekday, start, end]
+      properties:
+        weekday:
+          $ref: '#/components/schemas/Weekday'
+        start:
+          type: string
+          pattern: '^([01][0-9]|2[0-3]):(00|30)$'
+          description: Start of the interval, `HH:MM` UTC, on the half hour.
+          example: '09:00'
+        end:
+          type: string
+          pattern: '^(([01][0-9]|2[0-3]):(00|30)|24:00)$'
+          description: End of the interval, `HH:MM` UTC, on the half hour, after `start`.
+          example: '17:00'
+
+    WeeklyHours:
+      type: array
+      description: |
+        Weekly working hours: at least one interval and at most one interval per weekday
+        (ADR-0004); weekdays without an interval are closed. Order is not significant.
+      minItems: 1
+      maxItems: 7
+      items:
+        $ref: '#/components/schemas/WorkingInterval'
+
+    CreateResourceRequest:
+      type: object
+      required: [name, weeklyHours]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          example: Dr. Lee
+        weeklyHours:
+          $ref: '#/components/schemas/WeeklyHours'
+
+    Resource:
+      type: object
+      required: [id, name, weeklyHours]
+      properties:
+        id:
+          $ref: '#/components/schemas/ResourceId'
+        name:
+          type: string
+          minLength: 1
+        weeklyHours:
+          $ref: '#/components/schemas/WeeklyHours'
+
+    ResourceList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Resource'
+
+    Slot:
+      type: object
+      description: A 30-minute slot aligned to the half hour; `end` is `start` plus 30 minutes.
+      required: [start, end]
+      properties:
+        start:
+          type: string
+          format: date-time
+          example: '2026-11-02T09:00:00Z'
+        end:
+          type: string
+          format: date-time
+          example: '2026-11-02T09:30:00Z'
+
+    Availability:
+      type: object
+      required: [resourceId, from, to, slots]
+      properties:
+        resourceId:
+          $ref: '#/components/schemas/ResourceId'
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        slots:
+          type: array
+          description: Free slots ordered by start.
+          items:
+            $ref: '#/components/schemas/Slot'
+
+    BookSlotRequest:
+      type: object
+      description: |
+        The payload of a booking. `resourceId`, `slotStart` and `customerName` form the payload
+        that a repeat of `idempotencyKey` is compared with (ADR-0001, ADR-0015).
+      required: [resourceId, slotStart, customerName, idempotencyKey]
+      properties:
+        resourceId:
+          $ref: '#/components/schemas/ResourceId'
+        slotStart:
+          type: string
+          format: date-time
+          description: Start of the slot, RFC 3339, on the half hour.
+          example: '2026-11-02T09:00:00Z'
+        customerName:
+          type: string
+          minLength: 1
+          description: Customer name, compared byte for byte; not trimmed.
+          example: Ann
+        idempotencyKey:
+          type: string
+          minLength: 1
+          description: |
+            Caller-chosen key, unique across the service, compared byte for byte (no trimming, no
+            case folding). It travels in the body, not in a header, because HTTP strips leading
+            and trailing whitespace from header values and two keys that differ only by trailing
+            space are different keys (ADR-0015).
+          example: 3f6c2a1e-booking-ann
+
+    BookingStatus:
+      type: string
+      description: '`cancelled` is final; a booking never goes from `cancelled` back to `active`.'
+      enum: [active, cancelled]
+
+    Booking:
+      type: object
+      required: [id, resourceId, slotStart, slotEnd, customerName, status]
+      properties:
+        id:
+          $ref: '#/components/schemas/BookingId'
+        resourceId:
+          $ref: '#/components/schemas/ResourceId'
+        slotStart:
+          type: string
+          format: date-time
+          example: '2026-11-02T09:00:00Z'
+        slotEnd:
+          type: string
+          format: date-time
+          example: '2026-11-02T09:30:00Z'
+        customerName:
+          type: string
+          example: Ann
+        status:
+          $ref: '#/components/schemas/BookingStatus'
+
+    ErrorCode:
+      type: string
+      description: |
+        Stable error codes, declared once here (CON-004, ADR-0009). Each value keeps its meaning
+        across versions; new values may be added.
+        - `validation_error`: the request violates a declared input rule (400).
+        - `not_found`: the named resource, booking or path does not exist (404).
+        - `method_not_allowed`: the path exists but does not serve the method (405).
+        - `request_too_large`: the body exceeds the size the service reads (413).
+        - `slot_outside_working_hours`: the slot is not inside the resource's working hours (422).
+        - `slot_in_past`: the slot starts before the current time and its key is not stored (422).
+        - `slot_taken`: the slot has an active booking under another key (409).
+        - `idempotency_key_conflict`: the key is stored with a different payload (409, ADR-0001).
+        - `booking_cancelled`: a change would set a cancelled booking active again; cancelled is
+          final (409, FR-008, ADR-0010). No operation of this version requests that change.
+        - `internal_error`: an unexpected failure (500).
+      enum:
+        - validation_error
+        - not_found
+        - method_not_allowed
+        - request_too_large
+        - slot_outside_working_hours
+        - slot_in_past
+        - slot_taken
+        - idempotency_key_conflict
+        - booking_cancelled
+        - internal_error
+
+    Error:
+      type: object
+      description: The shape of every error response (CON-004).
+      required: [code, message]
+      properties:
+        code:
+          $ref: '#/components/schemas/ErrorCode'
+        message:
+          type: string
+          description: Human-readable explanation; not stable, not for matching.
