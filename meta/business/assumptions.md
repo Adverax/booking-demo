@@ -53,3 +53,12 @@ The generated net/http server, with a custom error handler where needed, returns
 - check: "by 2026-11-30, when the storage layer is specified, the slot start is stored in one canonical UTC form (or as integer epoch seconds) so the unique index on the active slot compares equal starts as equal"
 
 The only path that inserts a booking parses the slot start into a single canonical UTC representation, so two spellings of the same instant cannot produce two index keys.
+
+## ASM-0007 · The slot rules have a single owning component
+- status: unvalidated
+- owner: roman.miakotin
+- source: architect critic, synthesis, 2026-10-21
+- date: 2026-10-21
+- check: "by 2026-11-30, when the component interfaces are specified, half-hour alignment and the not-in-the-past rule are implemented in one place and shared by availability and booking, not twice"
+
+Half-hour alignment of a slot start and the not-in-the-past check are implemented once and used by both availability search and slot booking.

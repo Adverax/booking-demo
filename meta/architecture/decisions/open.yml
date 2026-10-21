@@ -378,3 +378,75 @@ open:
     criteria_refs: [CON-002, CON-004]
     status: open
     blocks: [none]
+  - id: DEC-031
+    question: >-
+      NFR-003 (every rule has a named test) and the NFR-001 release test (AC-031, 50 simultaneous HTTP requests) are mapped in trace.yml to production components that do not perform the check, and no element or ADR records the mechanism that does (a test-naming convention, a coverage check in CI, a release-test harness). Should the architecture record that mechanism (an ADR or a test-harness element), or stay outside the C4 model and be handled by the cards? Raised by the critic as contested.
+    surfaced_from:
+      kind: ambiguity
+      ref: [NFR-001, NFR-003, AC-031, AC-033]
+    alternatives:
+      - label: record_verification_mechanism
+        summary: "Record the mechanism in an ADR and show the release-test harness in the model."
+        pros: []
+        cons: []
+      - label: keep_outside_model
+        summary: "Treat tests as outside the C4 runtime model and let the delivery cards own the mechanism."
+        pros: []
+        cons: []
+    criteria_refs: [NFR-001, NFR-003]
+    status: open
+    blocks: [none]
+  - id: DEC-032
+    question: >-
+      CON-001 (times stored and returned in UTC, RFC 3339) is marked covered by design, but only the wire format is decided (ADR-0009): the storage representation of timestamps in SQLite and the source of the current time for the not-in-the-past check (INV-002) are not. Should an ADR fix the stored time format and an injectable clock, or are they an implementation detail left to the cards? Raised by the critic as contested; related to ASM-0006 and DEC-005.
+    surfaced_from:
+      kind: ambiguity
+      ref: [CON-001, INV-002, ADR-0009]
+    alternatives:
+      - label: decide_time_storage_and_clock
+        summary: "Fix the stored time representation and an injected clock source in an ADR."
+        pros: []
+        cons: []
+      - label: leave_as_implementation_detail
+        summary: "Leave both to the cards, covered by the UTC acceptance criteria."
+        pros: []
+        cons: []
+    criteria_refs: [CON-001, FR-005]
+    status: open
+    blocks: [decompose]
+  - id: DEC-033
+    question: >-
+      The component diagram describes the service bootstrap as opening the database and wiring components, but draws no relation from it to the store or to the domain components, so the owner of the open-database step (WAL and busy-timeout settings, ADR-0006) is not visible. Add those relations, or omit wiring edges as diagram noise? Raised by the critic as contested; related to DEC-028.
+    surfaced_from:
+      kind: ambiguity
+      ref: [ADR-0006, CON-005]
+    alternatives:
+      - label: draw_wiring_edges
+        summary: "Add the bootstrap relations to the store and the domain components."
+        pros: []
+        cons: []
+      - label: omit_wiring_edges
+        summary: "Omit wiring edges and rely on the component descriptions."
+        pros: []
+        cons: []
+    criteria_refs: [CON-005]
+    status: open
+    blocks: [none]
+  - id: DEC-034
+    question: >-
+      Evidence citations differ between trace rows: FR-005 cites no ADR-0004 although it relies on the working-hours shape (FR-003 cites it), and NFR-001 omits COMP-001 although AC-031 sends 50 HTTP requests. Align the citations, or leave them since the evidence is reachable through other rows? Raised by the critic as contested.
+    surfaced_from:
+      kind: ambiguity
+      ref: [FR-005, NFR-001, ADR-0004]
+    alternatives:
+      - label: align_row_citations
+        summary: "Add ADR-0004 to FR-005 and COMP-001 to NFR-001 so the rows are consistent."
+        pros: []
+        cons: []
+      - label: leave_rows_as_is
+        summary: "Leave the rows; the evidence is transitively reachable."
+        pros: []
+        cons: []
+    criteria_refs: [FR-005, NFR-001]
+    status: open
+    blocks: [none]
