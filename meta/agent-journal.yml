@@ -1,0 +1,12 @@
+# forge agent-invocation journal — GENERATED, do not edit and do not
+# commit (NFR-009 — secret-leak channel; .gitignore'd). Single writer
+# (ADR-0037/R1): hooks/agent-invocation.py, a PostToolUse hook on
+# the sub-agent spawn tool. One entry per real spawn (operation
+# invoke_agent, OTel GenAI semantic conventions aligned) — never a
+# chat/execute_tool span. Append-only, oldest entries evicted past the
+# cap (spirit of NFR-012). Each entry below is one YAML flow mapping per
+# line — and, not coincidentally, also valid JSON: read with
+# json.loads() per line (no YAML dependency needed), or with any YAML
+# library as an ordinary block sequence.
+entries:
+  - {"gen_ai.operation.name": "invoke_agent", "gen_ai.request.model": "claude-sonnet-5-5", "gen_ai.usage.input_tokens": null, "gen_ai.usage.output_tokens": null, "forge.envelope": null, "forge.station": "architect", "forge.card": "none", "forge.wave": "none", "forge.effort": null, "forge.model": "sonnet", "forge.transcript_ref": "/Users/romanmiakotin/.claude/projects/-Users-romanmiakotin-go-src-github-com-adverax-booking-demo/9aed5965-f00d-4713-9698-11834f886988.jsonl", "forge.parent_invocation_id": null, "run_id": null, "at": "2026-10-21T14:54:07Z"}

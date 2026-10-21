@@ -1,0 +1,22 @@
+# generated_by: architect-domain-extraction
+# generated_at: 2026-10-21T00:00:00Z
+# tier: medium
+events:
+  - id: EVT-001
+    name: ResourceCreated
+    triggered_by: CMD-001
+    aggregate: AGG-001
+    source: [US-001]
+    payload_summary: resource_id, name, weekly_working_hours
+  - id: EVT-002
+    name: BookingCreated
+    triggered_by: CMD-002
+    aggregate: AGG-002
+    source: [US-005]
+    payload_summary: booking_id, resource_id, slot_start, customer_name, idempotency_key
+  - id: EVT-003
+    name: BookingCancelled
+    triggered_by: CMD-003
+    aggregate: AGG-002
+    source: [US-007]
+    payload_summary: booking_id, resource_id, slot_start

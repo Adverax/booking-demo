@@ -1,0 +1,6 @@
+# generated_by: architect-domain-extraction
+# generated_at: 2026-10-21T00:00:00Z
+# tier: medium
+# No policy in scope: the only reaction-style rule (waitlist auto-booking on cancellation)
+# is explicitly deferred in the design brief ("Later, not now").
+policies: []

@@ -1,0 +1,22 @@
+# generated_by: architect-domain-extraction
+# generated_at: 2026-10-21T00:00:00Z
+# tier: medium
+aggregates:
+  - id: AGG-001
+    name: Resource
+    description: A bookable resource with its name and weekly working hours.
+    invariants:
+      - id: INV-005
+        statement: A resource always has a name and a weekly working-hours schedule.
+  - id: AGG-002
+    name: Booking
+    description: A customer's claim on one 30-minute slot of a resource; active until cancelled.
+    invariants:
+      - id: INV-001
+        statement: Two active bookings of the same resource never overlap, also under concurrent requests.
+      - id: INV-002
+        statement: A booking is accepted only for a slot inside the resource's working hours and not in the past.
+      - id: INV-003
+        statement: Repeating a booking request with the same idempotency key returns the original booking and creates nothing new; the key is unique across the whole service.
+      - id: INV-004
+        statement: A cancelled booking is final and cannot be reactivated; a new booking is needed.

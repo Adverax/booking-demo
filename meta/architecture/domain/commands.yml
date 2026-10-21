@@ -1,0 +1,25 @@
+# generated_by: architect-domain-extraction
+# generated_at: 2026-10-21T00:00:00Z
+# tier: medium
+commands:
+  - id: CMD-001
+    name: CreateResource
+    actor: ACT-001
+    target_aggregate: AGG-001
+    preconditions: [INV-005]
+    produces: [EVT-001]
+    source: [US-001]
+  - id: CMD-002
+    name: BookSlot
+    actor: ACT-002
+    target_aggregate: AGG-002
+    preconditions: [INV-001, INV-002, INV-003]
+    produces: [EVT-002]
+    source: [US-005, US-006]
+  - id: CMD-003
+    name: CancelBooking
+    actor: ACT-002
+    target_aggregate: AGG-002
+    preconditions: [INV-004]
+    produces: [EVT-003]
+    source: [US-007]

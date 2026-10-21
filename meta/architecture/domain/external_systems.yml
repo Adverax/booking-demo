@@ -1,0 +1,10 @@
+# generated_by: architect-domain-extraction
+# generated_at: 2026-10-21T00:00:00Z
+# tier: medium
+external_systems:
+  - id: EXT-001
+    name: StudioGateway
+    direction: inbound
+    protocol: rest
+    description: The studio's own gateway and frontend; the only caller of this service's HTTP API. Authentication and end-user identity are its concern.
+    owned: false

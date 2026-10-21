@@ -1,0 +1,64 @@
+# generated_by: architect-domain-extraction
+# generated_at: 2026-10-21T00:00:00Z
+# tier: medium
+terms:
+  - id: TERM-001
+    term: Resource
+    definition: A bookable thing of the business (a specialist, a room, a desk) with a name and weekly working hours.
+    context: unknown
+    aliases: []
+    source: [US-001, US-002, US-003]
+  - id: TERM-002
+    term: Working Hours
+    definition: The weekly schedule of a resource, for example Mon-Fri 09:00-17:00, inside which its slots can be booked.
+    context: unknown
+    aliases: [weekly working hours]
+    source: [US-001]
+  - id: TERM-003
+    term: Slot
+    definition: A 30-minute time interval of a resource, aligned to the half hour; the unit that is booked.
+    context: unknown
+    aliases: []
+    source: [US-004, US-005]
+  - id: TERM-004
+    term: Free Slot
+    definition: A slot that falls inside the resource's working hours and does not overlap an active booking.
+    context: unknown
+    aliases: [available slot]
+    source: [US-004]
+  - id: TERM-005
+    term: Booking
+    definition: A customer's claim on one slot of a resource, made with a customer name and an idempotency key.
+    context: unknown
+    aliases: []
+    source: [US-005, US-006, US-007]
+  - id: TERM-006
+    term: Active Booking
+    definition: A booking that has not been cancelled; only active bookings occupy their slot.
+    context: unknown
+    aliases: []
+    source: [US-004, US-007]
+  - id: TERM-007
+    term: Cancelled Booking
+    definition: A booking that was cancelled; it frees its slot at once and can never be reactivated.
+    context: unknown
+    aliases: []
+    source: [US-007]
+  - id: TERM-008
+    term: Idempotency Key
+    definition: A caller-supplied key, globally unique across the service, that makes a repeated booking request return the original booking.
+    context: unknown
+    aliases: []
+    source: [US-005, US-006]
+  - id: TERM-009
+    term: Operator
+    definition: Staff of the business who creates resources and sets their working hours.
+    context: unknown
+    aliases: []
+    source: [US-001, US-002]
+  - id: TERM-010
+    term: Customer
+    definition: The person who books and cancels slots, acting through the studio's frontend, which calls the API on their behalf.
+    context: unknown
+    aliases: []
+    source: [US-003, US-004, US-005, US-006, US-007]

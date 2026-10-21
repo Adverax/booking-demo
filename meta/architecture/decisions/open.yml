@@ -1,1 +1,200 @@
 # tier: medium
+open:
+  - id: DEC-001
+    question: >-
+      A booking request repeats an existing idempotency key but with a different resource, slot or customer name: should it return the original booking unchanged, or be rejected as a key conflict? The brief only defines the identical repeat.
+    surfaced_from:
+      kind: ambiguity
+      ref: [TERM-008, FR-006]
+    alternatives:
+      - label: return_original
+        summary: Always return the original booking, ignoring the new payload.
+        pros: []
+        cons: []
+      - label: reject_conflict
+        summary: Reject with a stable error code when the payload differs from the original.
+        pros: []
+        cons: []
+    criteria_refs: [FR-006]
+    status: open
+    blocks: [none]
+  - id: DEC-002
+    question: >-
+      A booking was cancelled and its idempotency key is then repeated: should the response be the original (now cancelled) booking, or may the key create a new booking? Cancellation is final, but the key is globally unique.
+    surfaced_from:
+      kind: ambiguity
+      ref: [INV-003, INV-004]
+    alternatives:
+      - label: return_cancelled_original
+        summary: Return the original booking with status cancelled; a new booking needs a new key.
+        pros: []
+        cons: []
+      - label: allow_new_booking
+        summary: Treat the key as free again and create a new booking.
+        pros: []
+        cons: []
+    criteria_refs: [FR-006, FR-008]
+    status: open
+    blocks: [none]
+  - id: DEC-003
+    question: >-
+      Cancelling a booking that is already cancelled: is it an idempotent success or an error?
+    surfaced_from:
+      kind: ambiguity
+      ref: [CMD-003, FR-007]
+    alternatives:
+      - label: idempotent_success
+        summary: Return the cancelled booking again as success.
+        pros: []
+        cons: []
+      - label: conflict_error
+        summary: Reject with a stable error code.
+        pros: []
+        cons: []
+    criteria_refs: [FR-007]
+    status: open
+    blocks: [none]
+  - id: DEC-004
+    question: >-
+      Shape of weekly working hours: may one weekday have several intervals (for example a lunch break), must interval bounds be half-hour aligned, and may an interval cross midnight UTC? The brief gives only the example Mon-Fri 09:00-17:00.
+    surfaced_from:
+      kind: ambiguity
+      ref: [TERM-002, FR-001]
+    alternatives:
+      - label: single_interval_per_day
+        summary: One interval per weekday, aligned to the half hour, within a single UTC day.
+        pros: []
+        cons: []
+      - label: multiple_intervals_per_day
+        summary: Several intervals per weekday allowed.
+        pros: []
+        cons: []
+    criteria_refs: [FR-001, FR-003]
+    status: open
+    blocks: [none]
+  - id: DEC-005
+    question: >-
+      What exactly is 'in the past' for a booking: a slot whose start is before now, or a slot whose end is before now (so a slot already in progress is still bookable)?
+    surfaced_from:
+      kind: ambiguity
+      ref: [INV-002, FR-005]
+    alternatives:
+      - label: start_before_now
+        summary: Reject when the slot start is earlier than the current time.
+        pros: []
+        cons: []
+      - label: end_before_now
+        summary: Reject only when the slot has fully ended.
+        pros: []
+        cons: []
+    criteria_refs: [FR-005]
+    status: open
+    blocks: [none]
+  - id: DEC-006
+    question: >-
+      What latency or throughput targets apply to the API (for example p95 per endpoint at a stated request rate)? The brief states none; no number is invented here.
+    surfaced_from:
+      kind: nfr
+      ref: [FR-005]
+    alternatives:
+      - label: target_defined
+        summary: Operator names a metric and threshold, formalized as an NFR.
+        pros: []
+        cons: []
+      - label: not_applicable
+        summary: Operator states why the category does not apply to this service.
+        pros: []
+        cons: []
+    criteria_refs: [FR-005]
+    status: open
+    blocks: [none]
+  - id: DEC-007
+    question: >-
+      Is there an uptime or recovery target for the service? The brief states none.
+    surfaced_from:
+      kind: nfr
+      ref: [CON-005]
+    alternatives:
+      - label: target_defined
+        summary: Operator names a metric and threshold, formalized as an NFR.
+        pros: []
+        cons: []
+      - label: not_applicable
+        summary: Operator states why the category does not apply to this service.
+        pros: []
+        cons: []
+    criteria_refs: [CON-005]
+    status: open
+    blocks: [none]
+  - id: DEC-008
+    question: >-
+      Does any regulation apply to the stored data (customer names), for example data protection or retention? The brief states none.
+    surfaced_from:
+      kind: nfr
+      ref: [TERM-010]
+    alternatives:
+      - label: target_defined
+        summary: Operator names a metric and threshold, formalized as an NFR.
+        pros: []
+        cons: []
+      - label: not_applicable
+        summary: Operator states why the category does not apply to this service.
+        pros: []
+        cons: []
+    criteria_refs: [TERM-010]
+    status: open
+    blocks: [none]
+  - id: DEC-009
+    question: >-
+      Is there a cost or resource budget for running the service? The brief states none.
+    surfaced_from:
+      kind: nfr
+      ref: [CON-003]
+    alternatives:
+      - label: target_defined
+        summary: Operator names a metric and threshold, formalized as an NFR.
+        pros: []
+        cons: []
+      - label: not_applicable
+        summary: Operator states why the category does not apply to this service.
+        pros: []
+        cons: []
+    criteria_refs: [CON-003]
+    status: open
+    blocks: [none]
+  - id: DEC-010
+    question: >-
+      What logging, metrics or tracing is required of the service? The brief states none.
+    surfaced_from:
+      kind: nfr
+      ref: [CON-005]
+    alternatives:
+      - label: target_defined
+        summary: Operator names a metric and threshold, formalized as an NFR.
+        pros: []
+        cons: []
+      - label: not_applicable
+        summary: Operator states why the category does not apply to this service.
+        pros: []
+        cons: []
+    criteria_refs: [CON-005]
+    status: open
+    blocks: [none]
+  - id: DEC-011
+    question: >-
+      With no authentication, a leaked booking id lets a third party cancel the booking (flagged in the stakeholder checkpoint): is any mitigation required beyond the gateway, for example unguessable booking ids or rate limiting?
+    surfaced_from:
+      kind: nfr
+      ref: [CON-006]
+    alternatives:
+      - label: target_defined
+        summary: Operator names a metric and threshold, formalized as an NFR.
+        pros: []
+        cons: []
+      - label: not_applicable
+        summary: Operator states why the category does not apply to this service.
+        pros: []
+        cons: []
+    criteria_refs: [CON-006]
+    status: open
+    blocks: [none]

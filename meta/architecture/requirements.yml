@@ -1,0 +1,353 @@
+# generated_by: architect-domain-extraction
+# generated_at: 2026-10-21T00:00:00Z
+# tier: medium
+functional:
+  - id: FR-001
+    statement: An operator creates a resource with a name and weekly working hours.
+    source: [US-001]
+    acceptance:
+      - id: AC-001
+        given: no resources exist and a request with name "Dr. Lee" and working hours Mon-Fri 09:00-17:00 UTC
+        when: the operator creates the resource
+        then: the resource is persisted and returned with a generated id
+        kind: happy
+        test: TestCreateResource_Persists
+      - id: AC-002
+        given: a request with name "Dr. Lee" and no working hours
+        when: the operator creates the resource
+        then: the response is a 4xx JSON error with a stable code field and nothing is persisted
+        kind: negative
+        test: TestCreateResource_RejectsMissingWorkingHours
+        invariant: INV-005
+      - id: AC-003
+        given: a request with an empty name and working hours Mon-Fri 09:00-17:00
+        when: the operator creates the resource
+        then: the response is a 4xx JSON error with a stable code field and nothing is persisted
+        kind: negative
+        test: TestCreateResource_RejectsEmptyName
+        invariant: INV-005
+  - id: FR-002
+    statement: Operators and customers list resources and read a single resource.
+    source: [US-002, US-003]
+    acceptance:
+      - id: AC-004
+        given: two persisted resources "Dr. Lee" and "Room A"
+        when: the resources are listed
+        then: the response contains exactly those 2 resources
+        kind: happy
+        test: TestListResources_ReturnsAll
+      - id: AC-005
+        given: a persisted resource "Room A" with a known id
+        when: that resource is read by id
+        then: the response contains the name and weekly working hours of "Room A"
+        kind: happy
+        test: TestGetResource_ReturnsResource
+      - id: AC-006
+        given: no resource with id "missing-id" exists
+        when: that id is read
+        then: the response is a not-found JSON error with a stable code field
+        kind: negative
+        test: TestGetResource_UnknownIdNotFound
+  - id: FR-003
+    statement: >-
+      Slots are 30 minutes long and aligned to the half hour. A slot is free when it falls inside
+      the resource's working hours and does not overlap an active booking.
+    source: [US-004]
+    acceptance:
+      - id: AC-007
+        given: a resource open Mon 09:00-10:00 UTC with no bookings
+        when: free slots are requested for that Monday
+        then: exactly 2 slots are returned, starting 09:00 and 09:30, each 30 minutes long
+        kind: happy
+        test: TestAvailability_ReturnsHalfHourSlotsInsideWorkingHours
+      - id: AC-008
+        given: a resource open Mon 09:00-10:00 UTC with an active booking for 09:00
+        when: free slots are requested for that Monday
+        then: only the 09:30 slot is returned
+        kind: boundary
+        test: TestAvailability_ExcludesActiveBookedSlot
+      - id: AC-009
+        given: a resource open Mon 09:00-10:00 UTC
+        when: free slots are requested for that Monday
+        then: no returned slot starts before 09:00 or ends after 10:00
+        kind: boundary
+        test: TestAvailability_ExcludesSlotsOutsideWorkingHours
+      - id: AC-010
+        given: a resource open Mon-Fri only
+        when: free slots are requested for a Saturday
+        then: the response contains 0 slots
+        kind: boundary
+        test: TestAvailability_NoSlotsOnNonWorkingDay
+  - id: FR-004
+    statement: Availability is queried for a resource and a date range of at most 14 days.
+    source: [US-004]
+    acceptance:
+      - id: AC-011
+        given: a persisted resource and a date range of exactly 14 days
+        when: free slots are requested
+        then: the request succeeds with slots for the whole range
+        kind: boundary
+        test: TestAvailability_AcceptsRangeOf14Days
+      - id: AC-012
+        given: a persisted resource and a date range of 15 days
+        when: free slots are requested
+        then: the response is a 4xx JSON error with a stable code field
+        kind: negative
+        test: TestAvailability_RejectsRangeOver14Days
+      - id: AC-013
+        given: no resource with id "missing-id" exists
+        when: free slots are requested for it
+        then: the response is a not-found JSON error with a stable code field
+        kind: negative
+        test: TestAvailability_UnknownResourceNotFound
+  - id: FR-005
+    statement: >-
+      A customer books one slot of a resource with a customer name and an idempotency key. A booking
+      is accepted only for a slot inside working hours and not in the past, and two active bookings
+      of the same resource never overlap, also under concurrent requests.
+    source: [US-005]
+    acceptance:
+      - id: AC-014
+        given: a resource open Mon-Fri 09:00-17:00 UTC with no bookings and a future Monday 09:00 slot
+        when: customer "Ann" books that slot with a new idempotency key
+        then: a booking for Monday 09:00 with the name "Ann" is persisted
+        kind: happy
+        test: TestBookSlot_PersistsBooking
+      - id: AC-015
+        given: a resource open Mon-Fri 09:00-17:00 UTC and a future Monday 08:00 slot
+        when: a customer books that slot
+        then: the response is a 4xx JSON error with a stable code field and nothing is persisted
+        kind: negative
+        test: TestBookSlot_RejectsSlotOutsideWorkingHours
+        invariant: INV-002
+      - id: AC-016
+        given: a resource open Mon-Fri 09:00-17:00 UTC and a slot that started 1 hour ago inside working hours
+        when: a customer books that slot
+        then: the response is a 4xx JSON error with a stable code field and nothing is persisted
+        kind: negative
+        test: TestBookSlot_RejectsSlotInThePast
+        invariant: INV-002
+      - id: AC-017
+        given: a request for a start time of 09:15 UTC, not aligned to the half hour
+        when: a customer books that slot
+        then: the response is a 4xx JSON error with a stable code field and nothing is persisted
+        kind: negative
+        test: TestBookSlot_RejectsNonAlignedStart
+      - id: AC-018
+        given: an active booking for Monday 09:00 of a resource
+        when: another customer books the same slot with a different idempotency key
+        then: the response is a conflict JSON error with a stable code field and still 1 active booking exists for that slot
+        kind: negative
+        test: TestBookSlot_RejectsAlreadyBookedSlot
+        invariant: INV-001
+      - id: AC-019
+        given: a free future slot of a resource
+        when: 50 simultaneous booking requests with 50 distinct idempotency keys target that slot
+        then: exactly 1 request succeeds and 49 are rejected with a conflict error
+        kind: concurrency
+        test: TestBookSlot_50ConcurrentRequestsExactlyOneWins
+        invariant: INV-001
+      - id: AC-020
+        given: no resource with id "missing-id" exists
+        when: a customer books a slot of it
+        then: the response is a not-found JSON error with a stable code field
+        kind: negative
+        test: TestBookSlot_UnknownResourceNotFound
+    engineering_constraints:
+      - id: EC-001
+        statement: For any set of concurrent booking requests for overlapping slots of one resource, at most one active booking exists afterwards
+        kind: concurrency
+        instances: [AC-019]
+        invariant: INV-001
+        test: PropertyTest_Booking_NoOverlapUnderConcurrency
+  - id: FR-006
+    statement: >-
+      Repeating a booking request with the same idempotency key returns the original booking and
+      creates nothing new. The idempotency key is globally unique across the service, not scoped per resource.
+    source: [US-006]
+    acceptance:
+      - id: AC-021
+        given: a booking for Monday 09:00 created with idempotency key K1
+        when: the identical request is repeated with key K1
+        then: the response is the original booking with the same booking id
+        kind: idempotency
+        test: TestBookSlot_RepeatReturnsOriginalBooking
+        invariant: INV-003
+      - id: AC-022
+        given: a booking created with idempotency key K1
+        when: the identical request is repeated with key K1
+        then: the total number of bookings stays 1
+        kind: idempotency
+        test: TestBookSlot_RepeatCreatesNothingNew
+        invariant: INV-003
+      - id: AC-023
+        given: 10 simultaneous identical booking requests with the same idempotency key K1
+        when: all are processed
+        then: exactly 1 booking exists and all 10 responses carry the same booking id
+        kind: concurrency
+        test: TestBookSlot_ConcurrentRepeatsYieldOneBooking
+        invariant: INV-003
+    engineering_constraints:
+      - id: EC-002
+        statement: A booking request repeated with the same idempotency key, in any number and at any time, never creates a second booking
+        kind: idempotency
+        instances: [AC-021, AC-022]
+        invariant: INV-003
+        test: PropertyTest_Booking_IdempotentUnderRetry
+      - id: EC-003
+        statement: For any number of simultaneous requests sharing one idempotency key, exactly one booking is created and every response carries its id
+        kind: concurrency
+        instances: [AC-023]
+        invariant: INV-003
+        test: PropertyTest_Booking_ConcurrentSameKeyYieldsOneBooking
+  - id: FR-007
+    statement: >-
+      A booking can be cancelled by anyone who knows its booking id; the service does not verify
+      identity. A cancelled booking frees its slot immediately.
+    source: [US-007]
+    acceptance:
+      - id: AC-024
+        given: an active booking for Monday 09:00 made by customer "Ann"
+        when: the booking is cancelled by its id
+        then: the booking status equals cancelled
+        kind: happy
+        test: TestCancelBooking_MarksCancelled
+      - id: AC-025
+        given: Monday 09:00 booked and no free slot listed for it
+        when: the booking is cancelled
+        then: the next availability query lists the Monday 09:00 slot as free
+        kind: happy
+        test: TestCancelBooking_FreesSlotImmediately
+      - id: AC-026
+        given: an active booking made by customer "Ann"
+        when: the cancel request carries no customer identity, only the booking id
+        then: the booking is cancelled
+        kind: authz
+        test: TestCancelBooking_AnyoneWithIdCanCancel
+      - id: AC-027
+        given: no booking with id "missing-id" exists
+        when: that booking is cancelled
+        then: the response is a not-found JSON error with a stable code field
+        kind: negative
+        test: TestCancelBooking_UnknownIdNotFound
+  - id: FR-008
+    statement: A cancelled booking cannot be reactivated; a new booking is needed.
+    source: [US-007]
+    acceptance:
+      - id: AC-028
+        given: a cancelled booking B1 for Monday 09:00
+        when: a customer books Monday 09:00 with a new idempotency key
+        then: a new booking B2 with a different id is created
+        kind: happy
+        test: TestBooking_NewBookingAfterCancelCreatesNewId
+        invariant: INV-004
+      - id: AC-029
+        given: a cancelled booking B1 for Monday 09:00 and B2 now active for that slot
+        when: B1 is read
+        then: B1 status equals cancelled
+        kind: boundary
+        test: TestBooking_CancelledStaysCancelled
+        invariant: INV-004
+      - id: AC-030
+        given: a cancelled booking B1
+        when: any request attempts to set B1 active again
+        then: the response is a conflict JSON error with a stable code field and B1 status stays cancelled
+        kind: negative
+        test: TestBooking_CannotReactivate
+        invariant: INV-004
+
+non_functional:
+  - id: NFR-001
+    category: scalability
+    metric: successful_bookings_per_50_simultaneous_requests_for_one_slot
+    threshold: exactly 1
+    condition: 50 simultaneous booking requests for the same slot (release criterion)
+    rationale: Concurrent bookings of one slot must resolve to exactly one winner; this drives the storage and locking design.
+    acceptance:
+      - id: AC-031
+        given: a free future slot and a fresh database
+        when: 50 simultaneous booking requests target that slot
+        then: successful_bookings == 1
+        kind: concurrency
+        test: TestRelease_ConcurrencyExactlyOneWinner
+  - id: NFR-002
+    category: operability
+    metric: end_to_end_api_scenarios_passing_on_fresh_database
+    threshold: 100%
+    condition: the full API run against a freshly created database (release criterion)
+    rationale: First-release criterion of the design brief.
+    acceptance:
+      - id: AC-032
+        given: a fresh database
+        when: the end-to-end scenario creates a resource, lists availability, books, repeats the booking and cancels
+        then: end_to_end_api_scenarios_passing == 100%
+        kind: happy
+        test: TestRelease_FullAPIEndToEndOnFreshDatabase
+  - id: NFR-003
+    category: maintainability
+    metric: rules_covered_by_a_named_test
+    threshold: 100%
+    condition: every rule of the design brief ("Rules that must always hold" and the stated FRs) (release criterion)
+    rationale: First-release criterion of the design brief; every rule needs at least one named test.
+    acceptance:
+      - id: AC-033
+        given: the list of rules and their linked test names in requirements.yml
+        when: the rule-to-test coverage check runs
+        then: rules_covered_by_a_named_test == 100%
+        kind: boundary
+        test: TestRelease_EveryRuleHasANamedTest
+
+nfr_coverage:
+  availability:
+    status: surfaced
+    ref: DEC-007
+  compliance:
+    status: surfaced
+    ref: DEC-008
+  cost:
+    status: surfaced
+    ref: DEC-009
+  maintainability:
+    status: covered
+    refs: [NFR-003]
+  observability:
+    status: surfaced
+    ref: DEC-010
+  operability:
+    status: covered
+    refs: [NFR-002]
+  performance:
+    status: surfaced
+    ref: DEC-006
+  scalability:
+    status: covered
+    refs: [NFR-001]
+  security:
+    status: surfaced
+    ref: DEC-011
+
+constraints:
+  - id: CON-001
+    type: technical
+    statement: All times are stored and returned in UTC, in RFC 3339 format.
+    source: design brief, 2026-10-21
+  - id: CON-002
+    type: technical
+    statement: Go 1.26, standard library net/http for the HTTP layer.
+    source: design brief, 2026-10-21
+  - id: CON-003
+    type: technical
+    statement: SQLite is the only storage, through a pure-Go driver, no cgo.
+    source: design brief, 2026-10-21
+  - id: CON-004
+    type: technical
+    statement: JSON over HTTP; errors are a JSON object with a stable code field.
+    source: design brief, 2026-10-21
+  - id: CON-005
+    type: technical
+    statement: One binary, configured through environment variables.
+    source: design brief, 2026-10-21
+  - id: CON-006
+    type: organizational
+    statement: No authentication; the service runs behind the studio's own gateway.
+    source: design brief, 2026-10-21

@@ -1,0 +1,12 @@
+# generated_by: architect-domain-extraction
+# generated_at: 2026-10-21T00:00:00Z
+# tier: medium
+actors:
+  - id: ACT-001
+    name: Operator
+    type: human
+    description: Staff of the business; creates resources and sets their working hours, and may list and read resources.
+  - id: ACT-002
+    name: Customer
+    type: human
+    description: Books and cancels slots through the studio's frontend, which calls the API on the customer's behalf.
