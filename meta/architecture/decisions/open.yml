@@ -144,24 +144,6 @@ open:
     criteria_refs: [FR-005, FR-006]
     status: open
     blocks: [none]
-  - id: DEC-013
-    question: >-
-      Should the rules created by ADR-0001..0004 be mirrored into the model now (reword INV-003 and INV-005, add acceptance criteria for the mismatching-key, repeat-after-cancel, repeated-cancel and malformed-working-hours paths), or left for later phases? Raised by the critics as a contested divergence between accepted ADRs and invariants/ACs.
-    surfaced_from:
-      kind: ambiguity
-      ref: [INV-003, INV-005, ADR-0001, ADR-0004]
-    alternatives:
-      - label: mirror_now
-        summary: "Reword INV-003 and INV-005 and add the missing ACs to requirements.yml now."
-        pros: []
-        cons: []
-      - label: defer_to_later
-        summary: "Keep requirements as extracted and add the ACs when cards are cut or tests are named."
-        pros: []
-        cons: []
-    criteria_refs: [FR-001, FR-006, FR-007, NFR-003]
-    status: open
-    blocks: [none]
   - id: DEC-014
     question: >-
       An idempotent no-op (a repeated cancel under ADR-0003, a repeated booking with the same key under FR-006) succeeds without a state change: does it emit its domain event again, or none? Raised by the critics as contested for EVT-002 and EVT-003.

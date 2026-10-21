@@ -64,3 +64,13 @@ resolved:
     resolved_by: ADR-0013
     resolution_label: decide_time_storage_and_clock
     date: 2026-10-21
+  - id: DEC-013
+    question: "Mirroring the ADR-derived rules into invariants and acceptance criteria"
+    resolved_by: ADR-0014
+    resolution_label: mirror_now
+    date: 2026-10-21
+  - id: DEC-035
+    question: "Sameness relations of resources, bookings and idempotency keys"
+    resolved_by: ADR-0015
+    resolution_label: exact_comparison
+    date: 2026-10-21
