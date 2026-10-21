@@ -1,10 +1,10 @@
 # ADR-0006: SQLite driver
 
-**Status:** Accepted  
+**Status:** Accepted (revised 2026-10-22)  
 **Date:** 2026-10-21  
 **Deciders:** @roman.miakotin  
-**Revised:** —  
-**Migration:** —  
+**Revised:** 2026-10-22  
+**Migration:** grandfather  
 **Pattern:** —  
 **API-Posture:** —
 
@@ -19,7 +19,7 @@ We will use modernc.org/sqlite through the standard `database/sql` interface. Th
 ## Alternatives considered
 
 ### modernc_sqlite (chosen)
-SQLite's C source machine-translated to Go. Mature and widely used. It produces a large generated code base, slower builds and a larger binary, and it has no connection-string option for immediate transactions, so those would need an explicit statement on a dedicated connection.
+SQLite's C source machine-translated to Go. Mature and widely used. It produces a large generated code base, slower builds and a larger binary, and, contrary to the first version of this ADR, it does offer a connection-string parameter for the transaction locking mode (`_txlock`, with the values deferred, immediate and exclusive), which was verified on v1.61.0 while implementing the store.
 
 ### ncruces_go_sqlite3
 SQLite compiled to WebAssembly and run by the wazero runtime, with a `database/sql` driver that supports a transaction lock mode option. Rejected because it is a younger project with a smaller user base and a WebAssembly runtime that adds startup cost and an unusual execution model, for an advantage this design does not need.
@@ -32,7 +32,7 @@ SQLite compiled to WebAssembly and run by the wazero runtime, with a `database/s
 
 ### Negative
 - A larger binary and slower builds because of the generated code base.
-- Immediate transactions, if ever needed, require an explicit statement on a dedicated connection.
+- The transaction locking mode is configured through the `_txlock` parameter, which is the fallback ADR-0012 names; its exact behaviour is covered by a test in the store package.
 
 ### Neutral
 - The migration approach and the concurrency enforcement must work with this driver (ADR-0007, ADR-0008).
@@ -45,5 +45,7 @@ SQLite compiled to WebAssembly and run by the wazero runtime, with a `database/s
 - CTX-001
 
 ## History
+
+- 2026-10-22: Revised — the first version said the driver has no connection-string option for immediate transactions; the CARD-002 implementation verified that `_txlock` exists on v1.61.0. The decision to use modernc.org/sqlite is unchanged. No code was built on the wrong statement, hence Migration: grandfather.
 
 - 2026-10-21: Created — modernc.org/sqlite chosen as the pure-Go SQLite driver.
