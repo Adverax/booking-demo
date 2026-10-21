@@ -7,7 +7,7 @@ aggregates:
     description: A bookable resource with its name and weekly working hours.
     invariants:
       - id: INV-005
-        statement: A resource always has a name and a weekly working-hours schedule with at most one interval per weekday, each interval bound aligned to the half hour and inside a single UTC day.
+        statement: A resource always has a name and a weekly working-hours schedule with at most one interval per weekday, each interval bound aligned to the half hour and inside a single UTC day, where the end of an interval may be 24:00 (the end of that UTC day, exclusive), the start may not be 24:00 and no bound exceeds 24:00.
   - id: AGG-002
     name: Booking
     description: A customer's claim on one 30-minute slot of a resource; active until cancelled.

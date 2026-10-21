@@ -68,5 +68,7 @@
 - A booking request with an empty idempotency key is rejected with a stable error code and creates nothing (FR). Source: ADR-0018, 2026-10-21.
 # processed: 2026-10-21 -> FR-006 (AC-055, AC-056, AC-058), FR-005 (AC-057)
 - When a booking request is rejected because its slot start is earlier than the current time, the service first looks up its idempotency key: a stored booking with the same payload is returned as the original booking, a stored booking with a different payload is the key conflict, and no stored booking means the request is rejected as a past slot (FR, invariant). Source: ADR-0020, 2026-10-21.
+# processed: 2026-10-22 -> FR-001 (AC-059, AC-060, AC-061), INV-005
 - The end of a weekly working-hours interval may be written 24:00, the end of the UTC day (exclusive); the start of an interval may not be 24:00 and no bound may exceed 24:00; every bound stays aligned to the half hour (FR). Source: ADR-0004 revised 2026-10-22.
+# processed: 2026-10-22 -> rename of PropertyTest_ to TestProperty_ in requirements.yml (EC-001..EC-005); no CON, trace.yml has no entry for one
 - Planned test names in acceptance criteria, edge cases and invariant checks must be valid Go test function names: names that start with PropertyTest_ are renamed to start with TestProperty_ (same remainder), because Go only runs functions that start with Test; the renaming keeps every criterion id unchanged (CON, maintenance). Source: CARD-002 review finding, 2026-10-22.
