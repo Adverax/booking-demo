@@ -1,6 +1,6 @@
 # CARD-005: Idempotent booking replay with insert-then-classify
 
-**Status:** blocked
+**Status:** ready
 **Priority:** P1
 **Category:** feature
 **Estimate:** 2c
@@ -18,13 +18,13 @@
 **Depends on:** CARD-004
 **Touches:** internal/booking/**.go, internal/httpapi/**.go, internal/store/*.go
 **UI surface:** none
-**Readiness:** 5/7 — gaps: blocking_decisions_resolved, dependencies_resolved
+**Readiness:** 7/7
 **Review score:** —
 **Started:** —
 **Closed:** —
 **Actual:** —
 **Merge commit:** —
-**Blocked by:** readiness — blocking_decisions_resolved, dependencies_resolved
+**Blocked by:** —
 
 ## What to implement
 
@@ -33,25 +33,31 @@ Increment 2, the idempotency half of "Idempotency and cancellation" (FR-006, INV
 - Insert first. When the insert fails with a unique violation, read the booking stored under the request's idempotency key with a separate autocommit read and classify from what is stored (ADR-0011, ADR-0012): same payload returns the original booking in its current state, also when it is cancelled (ADR-0002); a different payload is the key conflict (ADR-0001); no booking under the key means the slot was taken. The classification never depends on which index reported first.
 - Payload sameness is resource id, canonical slot start and customer name; keys and names are compared byte for byte as received, with no case folding and no trimming (ADR-0015, AC-043..AC-046). The key is unique across the whole service.
 - A taken slot under a new key stores nothing under that key (AC-047).
+- An empty idempotency key is rejected before any insert with a 4xx JSON error carrying a stable code, and nothing is persisted (ADR-0018, AC-053). An empty key never reaches the classifier.
 
 The classifier's states, declared before code (decompose 6d2):
 
 | state | output | channel | test |
 |---|---|---|---|
+| rejected before insert: empty idempotency key | 4xx JSON error with its stable code, nothing stored | HTTP error response | TestBookSlot_RejectsEmptyIdempotencyKey |
 | inserted (no violation) | the new booking, success | HTTP response of the book endpoint | TestBookSlot_RepeatCreatesNothingNew (first request), TestBookSlot_KeysDifferingOnlyByCaseAreDifferentKeys |
 | replay, same payload, booking active | the original booking with its id, success | HTTP response of the book endpoint | TestBookSlot_RepeatReturnsOriginalBooking |
 | replay, same payload, booking cancelled | the original booking with status cancelled, success | HTTP response of the book endpoint | TestBookSlot_RepeatAfterCancelReturnsCancelledOriginal |
 | key reused with a different payload | key-conflict JSON error with its stable code, nothing stored or changed | HTTP error response | TestBookSlot_RepeatWithDifferentNameIsKeyConflict, TestBookSlot_RepeatWithDifferentSlotIsKeyConflict, TestBookSlot_RepeatWithDifferentResourceIsKeyConflict |
 | violation and no booking under the key | slot-taken conflict JSON error with its stable code, nothing stored | HTTP error response | TestBookSlot_SlotTakenStoresNothingUnderNewKey |
 
-Open decision to settle before this card starts (handoff Increment 2: "DEC-012 ... to be settled before the card that implements replay"): DEC-012, whether the key lookup runs before the not-in-the-past validation for a late replay. Do not choose an order here; the past-slot check itself lands in CARD-007.
+Open decisions touching this card (current as of this decompose run; supersedes the list in Worktree notes, which the procedure carries over unchanged). Do not answer them here:
+- DEC-012: whether the key lookup runs before the not-in-the-past validation for a late replay. The handoff (Increment 2) asks for it "to be settled before the card that implements replay", which is this card. It is not a readiness gap: `open.yml` declares it `blocks: [none]`, FR-006 lists the order as out of scope, and none of this card's ACs exercises a late replay. Do not choose an order here; the past-slot check itself lands in CARD-007.
+- DEC-017: concurrent same-key requests with different payloads are not covered by this card's ACs.
+- DEC-014: whether a no-op replay emits its domain event again (EVT-002).
+Resolved since the first cut: DEC-016 (ADR-0018) adds AC-053 to this card.
 
 Moved to CARD-008: AC-042 (TestBookSlot_RepeatAfterCancelCreatesNoNewBooking) asserts that the slot "is still listed as free", which needs the availability query of Increment 3.
 
 ## Non goals
 
 - NG-1: The order of the key lookup against the not-in-the-past check (DEC-012, FR-006 out of scope)
-- NG-2: Empty or oversized idempotency keys (DEC-016, FR-006 out of scope)
+- NG-2: Maximum length of an idempotency key (left to the API specification, FR-006 out of scope)
 - NG-3: Further concurrency scenarios beyond the stated ones (DEC-017, FR-006 out of scope)
 
 ## Acceptance criteria
@@ -68,6 +74,7 @@ Moved to CARD-008: AC-042 (TestBookSlot_RepeatAfterCancelCreatesNoNewBooking) as
 - AC-045: Given a booking for Monday 09:00 by customer "Ann" with key K1, when a request repeats key K1 for the same slot with customer name "ann", then the response is a key-conflict JSON error with a stable code field — test: TestBookSlot_CustomerNameComparisonIsCaseSensitive
 - AC-046: Given a booking for Monday 09:00 by customer "Ann" with key K1, when a request repeats key K1 for the same slot with customer name "Ann " with a trailing space, then the response is a key-conflict JSON error with a stable code field — test: TestBookSlot_CustomerNameComparisonDoesNotTrim
 - AC-047: Given an active booking for Monday 09:00 stored under key K1, when another request with a new key K2 books the same slot, then the response is a slot-taken conflict JSON error and no booking is stored under key K2 — test: TestBookSlot_SlotTakenStoresNothingUnderNewKey
+- AC-053: Given a resource open Mon-Fri 09:00-17:00 UTC and a free future Monday 09:00 slot, when customer "Ann" books that slot with an empty idempotency key, then the response is a 4xx JSON error with a stable code field and nothing is persisted — test: TestBookSlot_RejectsEmptyIdempotencyKey
 
 ## Engineering constraints
 
@@ -91,7 +98,7 @@ Moved to CARD-008: AC-042 (TestBookSlot_RepeatAfterCancelCreatesNoNewBooking) as
 - CON-007 — The booking write path uses single autocommit statements and no transaction that reads and then writes. (check: review-lens)
 - CON-008 — Instants are stored as integer UTC epoch seconds and converted to RFC 3339 only at the API boundary; the current time is obtained through an injectable clock. (check: review-lens)
 - INV-001 — Two active bookings of the same resource never overlap, also under concurrent requests. (check: test: PropertyTest_Booking_NoOverlapUnderConcurrency, TestBookSlot_50ConcurrentRequestsExactlyOneWins, TestBookSlot_RejectsAlreadyBookedSlot, TestBookSlot_SameStartOnAnotherResourceIsNotTheSameSlot, TestBookSlot_SlotTakenStoresNothingUnderNewKey)
-- INV-002 — A booking is accepted only for a slot inside the resource's working hours and not in the past. (check: test: TestBookSlot_RejectsSlotInThePast, TestBookSlot_RejectsSlotOutsideWorkingHours)
+- INV-002 — A booking is accepted only for a slot inside the resource's working hours and not in the past (a slot whose start is earlier than the current time is rejected, a slot whose start equals or follows the current time is accepted). (check: test: TestBookSlot_AcceptsSlotStartingExactlyNow, TestBookSlot_RejectsSlotInThePast, TestBookSlot_RejectsSlotOutsideWorkingHours, TestBookSlot_RejectsSlotStartingOneSecondBeforeNow)
 - INV-003 — Repeating a booking request with the same idempotency key and an identical payload (resource id, slot start, customer name) returns the original booking in its current state and creates nothing new; the same key with a different payload is rejected as a key conflict; the key is unique across the whole service. (check: test: PropertyTest_Booking_ConcurrentSameKeyYieldsOneBooking, PropertyTest_Booking_IdempotentUnderRetry, PropertyTest_Booking_KeyReuseWithDifferentPayloadCreatesNothing, TestBookSlot_ConcurrentRepeatsYieldOneBooking, TestBookSlot_CustomerNameComparisonDoesNotTrim, TestBookSlot_CustomerNameComparisonIsCaseSensitive, TestBookSlot_KeysDifferingOnlyByCaseAreDifferentKeys, TestBookSlot_KeysDifferingOnlyByTrailingSpaceAreDifferentKeys, TestBookSlot_RepeatAfterCancelReturnsCancelledOriginal, TestBookSlot_RepeatCreatesNothingNew, TestBookSlot_RepeatReturnsOriginalBooking, TestBookSlot_RepeatWithDifferentNameIsKeyConflict, TestBookSlot_RepeatWithDifferentResourceIsKeyConflict, TestBookSlot_RepeatWithDifferentSlotIsKeyConflict)
 - INV-004 — A cancelled booking is final and cannot be reactivated, and the schema rejects the transition from cancelled to active as well as the domain code; a new booking is needed. (check: test: TestBookSlot_RepeatAfterCancelCreatesNoNewBooking, TestBooking_CancelledStaysCancelled, TestBooking_CannotReactivate, TestBooking_NewBookingAfterCancelCreatesNewId, TestSchema_RejectsCancelledToActiveTransition)
 - INV-005 — A resource always has a name and a weekly working-hours schedule with at most one interval per weekday, each interval bound aligned to the half hour and inside a single UTC day. (check: test: TestCreateResource_RejectsEmptyName, TestCreateResource_RejectsIntervalCrossingMidnightUtc, TestCreateResource_RejectsMisalignedIntervalBound, TestCreateResource_RejectsMissingWorkingHours, TestCreateResource_RejectsTwoIntervalsOnOneWeekday)
@@ -101,8 +108,8 @@ Moved to CARD-008: AC-042 (TestBookSlot_RepeatAfterCancelCreatesNoNewBooking) as
 - testable_acceptance_criteria — gap_free
 - engineering_constraint_coverage — gap_free
 - architecture_traceability — gap_free
-- blocking_decisions_resolved — gap: blocking decisions: open and blocking: DEC-016 — the candidate waits on an unresolved DEC.
-- dependencies_resolved — gap: dependencies: CARD-004 (status 'blocked' does not resolve) — a declared dependency does not resolve.
+- blocking_decisions_resolved — gap_free
+- dependencies_resolved — gap_free
 - design_seed_for_user_facing — gap_free_by_non_applicability: not applicable — the card's own `UI surface:` machine stamp reads `none` (step 6b, FR-061); there is no surface to seed.
 - open_subject_answered — gap_free
 
@@ -110,7 +117,7 @@ Moved to CARD-008: AC-042 (TestBookSlot_RepeatAfterCancelCreatesNoNewBooking) as
 
 - **FR:** FR-006
 - **NFR:** —
-- **ADR:** ADR-0001, ADR-0002, ADR-0008, ADR-0011, ADR-0012, ADR-0015
+- **ADR:** ADR-0001, ADR-0002, ADR-0008, ADR-0011, ADR-0012, ADR-0015, ADR-0018
 - **Components:** COMP-001, COMP-004, COMP-005
 - **Trace:** meta/architecture/trace.yml
 

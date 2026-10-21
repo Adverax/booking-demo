@@ -1,0 +1,14 @@
+{
+  "card:CARD-001:slice:backlog": "34a22065332ff9404629364972a0e545ac8b2c836a6607919eb21e73bdd072ff",
+  "card:CARD-001:slice:governance": "fff54cba1e113d3099e3a2bbd26ffaee929c0270486fd278cc77668afce01be3",
+  "card:CARD-001:slice:increment": "4a902495a6f2511ff1c759ff32a1069ab739a1892a57b6ede0a20bb5fb25ae34",
+  "card:CARD-001:slice:requirements": "c87477740a22d0dfde6d8dd4ac8b7a26d73ed5c15364a13a74b896d174fd4548",
+  "card:CARD-001:slice:trace": "3ac1dcc1f70f5622a3f0a23a211548fa6d5c3cf2fe8ae77519f11271b6424f37",
+  "card:CARD-001:slice:wave_context": "ad8f0124259339bca6a70b129f69a0fbd455b77466148e89477ec876580e91b4",
+  "card:CARD-002:slice:backlog": "34a22065332ff9404629364972a0e545ac8b2c836a6607919eb21e73bdd072ff",
+  "card:CARD-002:slice:governance": "fff54cba1e113d3099e3a2bbd26ffaee929c0270486fd278cc77668afce01be3",
+  "card:CARD-002:slice:increment": "4a902495a6f2511ff1c759ff32a1069ab739a1892a57b6ede0a20bb5fb25ae34",
+  "card:CARD-002:slice:requirements": "c87477740a22d0dfde6d8dd4ac8b7a26d73ed5c15364a13a74b896d174fd4548",
+  "card:CARD-002:slice:trace": "3ac1dcc1f70f5622a3f0a23a211548fa6d5c3cf2fe8ae77519f11271b6424f37",
+  "card:CARD-002:slice:wave_context": "22e805659e1d7e6b2a7a9b460828f62a3839d3c5ee630727130108099bbc8f2c"
+}

@@ -1,6 +1,6 @@
 # Kanban Board
 
-_Updated: 2026-10-21 19:47_
+_Updated: 2026-10-21 19:58_
 
 ## Wave plan
 | Wave | Cards | Status |
@@ -17,6 +17,12 @@ _Gantt: [meta/kanban/gantt.md](gantt.md)_
 ## Ready
 - **CARD-001** P1 · OpenAPI contract and generated server interface  _(wave 1)_
 - **CARD-002** P1 · SQLite store and embedded schema migrations  _(wave 1)_
+- **CARD-003** P1 · Walking skeleton: bootstrap, minimal resource creation and booking one slot  _(wave 2)_
+- **CARD-004** P1 · Cancel a booking and keep cancellation final  _(wave 3)_
+- **CARD-005** P1 · Idempotent booking replay with insert-then-classify  _(wave 4)_
+- **CARD-006** P2 · Resource catalog: validated creation, list and read  _(wave 3)_
+- **CARD-007** P1 · Booking validation: working hours, past slots, alignment, unknown resource  _(wave 5)_
+- **CARD-008** P1 · Availability search over a date range  _(wave 5)_
 
 ## In Progress
 _(none)_
@@ -28,10 +34,4 @@ _(none)_
 _(none)_
 
 ## Blocked
-- **CARD-003** 🔒 Walking skeleton: bootstrap, minimal resource creation and booking one slot  ← readiness — blocking_decisions_resolved
-- **CARD-004** 🔒 Cancel a booking and keep cancellation final  ← readiness — dependencies_resolved
-- **CARD-005** 🔒 Idempotent booking replay with insert-then-classify  ← readiness — blocking_decisions_resolved, dependencies_resolved
-- **CARD-006** 🔒 Resource catalog: validated creation, list and read  ← readiness — dependencies_resolved
-- **CARD-007** 🔒 Booking validation: working hours, past slots, alignment, unknown resource  ← readiness — blocking_decisions_resolved, dependencies_resolved
-- **CARD-008** 🔒 Availability search over a date range  ← readiness — blocking_decisions_resolved, dependencies_resolved
 - **CARD-009** 🔒 Release criteria suite and supervisor deployment sample  ← readiness — blocking_decisions_resolved, dependencies_resolved

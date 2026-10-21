@@ -34,10 +34,13 @@ Increment 1 opens with the contract: ADR-0009 requires the OpenAPI document befo
 - Every error is a JSON object with a stable `code` field (CON-004). The codes are declared once, in the specification (ADR-0009): at least not found, validation error, slot taken (AC-018, AC-047) and idempotency-key conflict (ADR-0001, AC-038..AC-040), kept distinct.
 - Generate the types and the `net/http` server interface from the document (ADR-0009 names oapi-codegen as the example generator), mounted on `http.ServeMux`, under `internal/httpapi/`, with the `go:generate` directive that reproduces it. No handler logic: handlers are implemented by the cards that own each behaviour.
 
+Decided since the first cut, and declared by the contract:
+- ADR-0018 (DEC-016 resolved): the contract declares the matching input constraints. An empty customer name (AC-052) and an empty idempotency key (AC-053) are rejected with a stable code, and so is an availability range whose start is after its end (AC-054). The range ordering cannot be expressed as a schema keyword: document it on the operation and its error response. Maximum lengths of names and keys are left to the API specification by FR-005 and FR-006 and no acceptance criterion tests them, so do not invent a figure.
+- ADR-0016 (DEC-005 resolved): a slot is in the past when its start is earlier than the current time; a start equal to now is accepted. Describe the past-slot rejection that way.
+
 Open decisions this card must not answer (record them as TODO comments in the spec, do not invent constraints):
-- DEC-016: validation of an empty customer name, an empty or oversized idempotency key, and an availability range whose start is after its end is not decided. Do not add `minLength`/`maxLength` or ordering constraints for those inputs.
 - DEC-011: the format of booking ids (guessable or not) is not decided; declare them as opaque strings.
-- DEC-005: what "in the past" means is not decided; the contract only declares that a past slot is rejected with a stable code.
+- DEC-030: whether ADR-0009's rejection reason is restated on the drift argument. The decision itself is not reopened; contract-first stands.
 
 ## Guardrails
 
@@ -52,7 +55,7 @@ Open decisions this card must not answer (record them as TODO comments in the sp
 - CON-007 — The booking write path uses single autocommit statements and no transaction that reads and then writes. (check: review-lens)
 - CON-008 — Instants are stored as integer UTC epoch seconds and converted to RFC 3339 only at the API boundary; the current time is obtained through an injectable clock. (check: review-lens)
 - INV-001 — Two active bookings of the same resource never overlap, also under concurrent requests. (check: test: PropertyTest_Booking_NoOverlapUnderConcurrency, TestBookSlot_50ConcurrentRequestsExactlyOneWins, TestBookSlot_RejectsAlreadyBookedSlot, TestBookSlot_SameStartOnAnotherResourceIsNotTheSameSlot, TestBookSlot_SlotTakenStoresNothingUnderNewKey)
-- INV-002 — A booking is accepted only for a slot inside the resource's working hours and not in the past. (check: test: TestBookSlot_RejectsSlotInThePast, TestBookSlot_RejectsSlotOutsideWorkingHours)
+- INV-002 — A booking is accepted only for a slot inside the resource's working hours and not in the past (a slot whose start is earlier than the current time is rejected, a slot whose start equals or follows the current time is accepted). (check: test: TestBookSlot_AcceptsSlotStartingExactlyNow, TestBookSlot_RejectsSlotInThePast, TestBookSlot_RejectsSlotOutsideWorkingHours, TestBookSlot_RejectsSlotStartingOneSecondBeforeNow)
 - INV-003 — Repeating a booking request with the same idempotency key and an identical payload (resource id, slot start, customer name) returns the original booking in its current state and creates nothing new; the same key with a different payload is rejected as a key conflict; the key is unique across the whole service. (check: test: PropertyTest_Booking_ConcurrentSameKeyYieldsOneBooking, PropertyTest_Booking_IdempotentUnderRetry, PropertyTest_Booking_KeyReuseWithDifferentPayloadCreatesNothing, TestBookSlot_ConcurrentRepeatsYieldOneBooking, TestBookSlot_CustomerNameComparisonDoesNotTrim, TestBookSlot_CustomerNameComparisonIsCaseSensitive, TestBookSlot_KeysDifferingOnlyByCaseAreDifferentKeys, TestBookSlot_KeysDifferingOnlyByTrailingSpaceAreDifferentKeys, TestBookSlot_RepeatAfterCancelReturnsCancelledOriginal, TestBookSlot_RepeatCreatesNothingNew, TestBookSlot_RepeatReturnsOriginalBooking, TestBookSlot_RepeatWithDifferentNameIsKeyConflict, TestBookSlot_RepeatWithDifferentResourceIsKeyConflict, TestBookSlot_RepeatWithDifferentSlotIsKeyConflict)
 - INV-004 — A cancelled booking is final and cannot be reactivated, and the schema rejects the transition from cancelled to active as well as the domain code; a new booking is needed. (check: test: TestBookSlot_RepeatAfterCancelCreatesNoNewBooking, TestBooking_CancelledStaysCancelled, TestBooking_CannotReactivate, TestBooking_NewBookingAfterCancelCreatesNewId, TestSchema_RejectsCancelledToActiveTransition)
 - INV-005 — A resource always has a name and a weekly working-hours schedule with at most one interval per weekday, each interval bound aligned to the half hour and inside a single UTC day. (check: test: TestCreateResource_RejectsEmptyName, TestCreateResource_RejectsIntervalCrossingMidnightUtc, TestCreateResource_RejectsMisalignedIntervalBound, TestCreateResource_RejectsMissingWorkingHours, TestCreateResource_RejectsTwoIntervalsOnOneWeekday)
@@ -71,7 +74,7 @@ Open decisions this card must not answer (record them as TODO comments in the sp
 
 - **FR:** —
 - **NFR:** —
-- **ADR:** ADR-0009, ADR-0001, ADR-0004
+- **ADR:** ADR-0009, ADR-0001, ADR-0004, ADR-0016, ADR-0018
 - **Components:** COMP-001
 - **Trace:** meta/architecture/trace.yml
 

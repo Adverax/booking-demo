@@ -1,6 +1,6 @@
 # CARD-003: Walking skeleton: bootstrap, minimal resource creation and booking one slot
 
-**Status:** blocked
+**Status:** ready
 **Priority:** P1
 **Category:** feature
 **Estimate:** 2c
@@ -17,13 +17,13 @@
 **Depends on:** CARD-001, CARD-002
 **Touches:** cmd/booking/**.go, internal/httpapi/**.go, internal/booking/**.go, internal/catalog/**.go, internal/store/*.go
 **UI surface:** none
-**Readiness:** 6/7 — gaps: blocking_decisions_resolved
+**Readiness:** 7/7
 **Review score:** —
 **Started:** —
 **Closed:** —
 **Actual:** —
 **Merge commit:** —
-**Blocked by:** readiness — blocking_decisions_resolved
+**Blocked by:** —
 
 ## What to implement
 
@@ -35,13 +35,22 @@ Increment 1, "Walking skeleton through the riskiest path": the real binary serve
 - The write is one autocommit INSERT with no transaction that reads and then writes (ADR-0012, CON-007); the partial unique index of ADR-0008 decides the winner, and its violation is mapped to a conflict response with a stable code (AC-018). Telling a replay apart from a key conflict (insert-then-classify, ADR-0011) is CARD-005's.
 - The concurrency test starts the real binary against a fresh SQLite file and fires 50 simultaneous requests with distinct keys at one slot: exactly one success, 49 conflicts, no lock errors (Increment 1 checkpoint, AC-019, NFR-001's uncertainty). If lock errors appear, ADR-0012's fallback (immediate transactions through the driver's lock option) applies only after the `_txlock` verification recorded by CARD-002.
 
-Requirement slice: the handoff splits FR-005 and FR-001 across increments by their test lists. This card carries FR-005's AC-014, AC-018, AC-019, AC-037 and EC-001, and FR-001's AC-001. FR-005's AC-015, AC-016, AC-017, AC-020 go to CARD-007 and FR-001's remaining ACs to CARD-006 (Increment 3). NFR-001's own release criterion AC-031 is carried by CARD-009 (Increment 4).
+Requirement slice: the handoff splits FR-005 and FR-001 across increments by their test lists. This card carries FR-005's AC-014, AC-018, AC-019, AC-037 and EC-001, and FR-001's AC-001. FR-005's AC-015, AC-016, AC-017, AC-020 and the ADR-0016/ADR-0018 criteria AC-050, AC-051, AC-052 (start before now, start equal to now, empty customer name; all listed under Increment 3) go to CARD-007, and FR-001's remaining ACs to CARD-006 (Increment 3). NFR-001's own release criterion AC-031 is carried by CARD-009 (Increment 4).
+
+Open decisions touching this card (current as of this decompose run; the decision list in Worktree notes predates ADR-0016..0019 and is carried over unchanged by the procedure, so this list supersedes it). Do not answer them here:
+- DEC-017: a cancel racing a booking of the same slot, and concurrent same-key requests with different payloads, are not covered by this card's ACs.
+- DEC-029: the single-instance premise that the 50-writer result relies on (ADR-0005, ADR-0008) is not enforced; do not add an instance lock.
+- DEC-033: the bootstrap's open-database wiring is not drawn in the component diagram; diagram only.
+- DEC-007, DEC-010: no uptime target and no logging, metrics or tracing requirement is decided for the bootstrap (CON-005); do not add any beyond what the code needs to run.
+Resolved since the first cut: DEC-005 (ADR-0016) and DEC-016 (ADR-0018) land in CARD-007; this card's ACs exercise neither.
 
 ## Non goals
 
 - NG-1: Full working-hours validation of resource creation (deferred to Increment 3, FR-001 full validation)
 - NG-2: Partial overlaps of bookings (cannot occur with fixed 30-minute slots, ASM-0003)
 - NG-3: Holidays, per-date exceptions, several intervals per day, a lunch break (FR-001 out of scope)
+- NG-4: The order of the not-in-the-past check against the idempotent replay (DEC-012, FR-005 out of scope)
+- NG-5: Maximum length of a customer name and the error-code names (left to the API specification, FR-005 out of scope)
 
 ## Acceptance criteria
 
@@ -71,7 +80,7 @@ Requirement slice: the handoff splits FR-005 and FR-001 across increments by the
 - CON-007 — The booking write path uses single autocommit statements and no transaction that reads and then writes. (check: review-lens)
 - CON-008 — Instants are stored as integer UTC epoch seconds and converted to RFC 3339 only at the API boundary; the current time is obtained through an injectable clock. (check: review-lens)
 - INV-001 — Two active bookings of the same resource never overlap, also under concurrent requests. (check: test: PropertyTest_Booking_NoOverlapUnderConcurrency, TestBookSlot_50ConcurrentRequestsExactlyOneWins, TestBookSlot_RejectsAlreadyBookedSlot, TestBookSlot_SameStartOnAnotherResourceIsNotTheSameSlot, TestBookSlot_SlotTakenStoresNothingUnderNewKey)
-- INV-002 — A booking is accepted only for a slot inside the resource's working hours and not in the past. (check: test: TestBookSlot_RejectsSlotInThePast, TestBookSlot_RejectsSlotOutsideWorkingHours)
+- INV-002 — A booking is accepted only for a slot inside the resource's working hours and not in the past (a slot whose start is earlier than the current time is rejected, a slot whose start equals or follows the current time is accepted). (check: test: TestBookSlot_AcceptsSlotStartingExactlyNow, TestBookSlot_RejectsSlotInThePast, TestBookSlot_RejectsSlotOutsideWorkingHours, TestBookSlot_RejectsSlotStartingOneSecondBeforeNow)
 - INV-003 — Repeating a booking request with the same idempotency key and an identical payload (resource id, slot start, customer name) returns the original booking in its current state and creates nothing new; the same key with a different payload is rejected as a key conflict; the key is unique across the whole service. (check: test: PropertyTest_Booking_ConcurrentSameKeyYieldsOneBooking, PropertyTest_Booking_IdempotentUnderRetry, PropertyTest_Booking_KeyReuseWithDifferentPayloadCreatesNothing, TestBookSlot_ConcurrentRepeatsYieldOneBooking, TestBookSlot_CustomerNameComparisonDoesNotTrim, TestBookSlot_CustomerNameComparisonIsCaseSensitive, TestBookSlot_KeysDifferingOnlyByCaseAreDifferentKeys, TestBookSlot_KeysDifferingOnlyByTrailingSpaceAreDifferentKeys, TestBookSlot_RepeatAfterCancelReturnsCancelledOriginal, TestBookSlot_RepeatCreatesNothingNew, TestBookSlot_RepeatReturnsOriginalBooking, TestBookSlot_RepeatWithDifferentNameIsKeyConflict, TestBookSlot_RepeatWithDifferentResourceIsKeyConflict, TestBookSlot_RepeatWithDifferentSlotIsKeyConflict)
 - INV-004 — A cancelled booking is final and cannot be reactivated, and the schema rejects the transition from cancelled to active as well as the domain code; a new booking is needed. (check: test: TestBookSlot_RepeatAfterCancelCreatesNoNewBooking, TestBooking_CancelledStaysCancelled, TestBooking_CannotReactivate, TestBooking_NewBookingAfterCancelCreatesNewId, TestSchema_RejectsCancelledToActiveTransition)
 - INV-005 — A resource always has a name and a weekly working-hours schedule with at most one interval per weekday, each interval bound aligned to the half hour and inside a single UTC day. (check: test: TestCreateResource_RejectsEmptyName, TestCreateResource_RejectsIntervalCrossingMidnightUtc, TestCreateResource_RejectsMisalignedIntervalBound, TestCreateResource_RejectsMissingWorkingHours, TestCreateResource_RejectsTwoIntervalsOnOneWeekday)
@@ -81,7 +90,7 @@ Requirement slice: the handoff splits FR-005 and FR-001 across increments by the
 - testable_acceptance_criteria — gap_free
 - engineering_constraint_coverage — gap_free
 - architecture_traceability — gap_free
-- blocking_decisions_resolved — gap: blocking decisions: open and blocking: DEC-005, DEC-006, DEC-016, DEC-034 — the candidate waits on an unresolved DEC.
+- blocking_decisions_resolved — gap_free
 - dependencies_resolved — gap_free
 - design_seed_for_user_facing — gap_free_by_non_applicability: not applicable — the card's own `UI surface:` machine stamp reads `none` (step 6b, FR-061); there is no surface to seed.
 - open_subject_answered — gap_free

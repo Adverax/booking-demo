@@ -17,7 +17,7 @@
 **Depends on:** CARD-007, CARD-008
 **Touches:** api/openapi.yaml, internal/httpapi/**.go, cmd/booking/**.go
 **UI surface:** none
-**Readiness:** 5/7 — gaps: blocking_decisions_resolved, dependencies_resolved
+**Readiness:** 6/7 — gaps: blocking_decisions_resolved
 **Review score:** —
 **Started:** —
 **Closed:** —
@@ -35,7 +35,12 @@ Increment 4, "Release criteria". The checkpoint is `go test -run TestRelease ./.
 - Check that the generated HTTP plumbing returns the stable JSON error shape with a `code` field for every failure, including the generator's own request-decoding and routing failures (ASM-0005, CON-004).
 - A sample OS supervisor unit and environment file for running the binary (ADR-0005): the database path and other settings as environment variables, a single instance on a local disk. The handoff names no path for these two files; choose one and record it in Worktree notes.
 
-Open decisions this card must not answer: DEC-031 (how rule-to-test coverage is checked: an ADR or harness element, or left to the cards) is open and decides the mechanism behind TestRelease_EveryRuleHasANamedTest; DEC-018 (NFR-001's category label) and DEC-029 (whether the single-instance premise is enforced or only documented, which shapes the supervisor unit) are open.
+Open decisions touching this card (current as of this decompose run). Do not answer them here:
+- DEC-031: how rule-to-test coverage is checked (an ADR or harness element, or left to the cards). It decides the mechanism behind TestRelease_EveryRuleHasANamedTest. Readiness gap.
+- DEC-018: NFR-001's category label (scalability, or a correctness release criterion). Readiness gap.
+- DEC-029: whether the single-instance premise is enforced or only documented, which shapes the supervisor unit.
+- DEC-007, DEC-010: no uptime target and no logging, metrics or tracing requirement is decided; the supervisor unit adds none.
+Resolved since the first cut: DEC-034 (ADR-0019, trace citations aligned) and DEC-006 (ADR-0017, performance not applicable: the release suite measures correctness under concurrency, not latency or throughput). The rule list behind AC-033 now includes AC-050..AC-054.
 
 ## Acceptance criteria
 
@@ -57,7 +62,7 @@ Open decisions this card must not answer: DEC-031 (how rule-to-test coverage is 
 - CON-007 — The booking write path uses single autocommit statements and no transaction that reads and then writes. (check: review-lens)
 - CON-008 — Instants are stored as integer UTC epoch seconds and converted to RFC 3339 only at the API boundary; the current time is obtained through an injectable clock. (check: review-lens)
 - INV-001 — Two active bookings of the same resource never overlap, also under concurrent requests. (check: test: PropertyTest_Booking_NoOverlapUnderConcurrency, TestBookSlot_50ConcurrentRequestsExactlyOneWins, TestBookSlot_RejectsAlreadyBookedSlot, TestBookSlot_SameStartOnAnotherResourceIsNotTheSameSlot, TestBookSlot_SlotTakenStoresNothingUnderNewKey)
-- INV-002 — A booking is accepted only for a slot inside the resource's working hours and not in the past. (check: test: TestBookSlot_RejectsSlotInThePast, TestBookSlot_RejectsSlotOutsideWorkingHours)
+- INV-002 — A booking is accepted only for a slot inside the resource's working hours and not in the past (a slot whose start is earlier than the current time is rejected, a slot whose start equals or follows the current time is accepted). (check: test: TestBookSlot_AcceptsSlotStartingExactlyNow, TestBookSlot_RejectsSlotInThePast, TestBookSlot_RejectsSlotOutsideWorkingHours, TestBookSlot_RejectsSlotStartingOneSecondBeforeNow)
 - INV-003 — Repeating a booking request with the same idempotency key and an identical payload (resource id, slot start, customer name) returns the original booking in its current state and creates nothing new; the same key with a different payload is rejected as a key conflict; the key is unique across the whole service. (check: test: PropertyTest_Booking_ConcurrentSameKeyYieldsOneBooking, PropertyTest_Booking_IdempotentUnderRetry, PropertyTest_Booking_KeyReuseWithDifferentPayloadCreatesNothing, TestBookSlot_ConcurrentRepeatsYieldOneBooking, TestBookSlot_CustomerNameComparisonDoesNotTrim, TestBookSlot_CustomerNameComparisonIsCaseSensitive, TestBookSlot_KeysDifferingOnlyByCaseAreDifferentKeys, TestBookSlot_KeysDifferingOnlyByTrailingSpaceAreDifferentKeys, TestBookSlot_RepeatAfterCancelReturnsCancelledOriginal, TestBookSlot_RepeatCreatesNothingNew, TestBookSlot_RepeatReturnsOriginalBooking, TestBookSlot_RepeatWithDifferentNameIsKeyConflict, TestBookSlot_RepeatWithDifferentResourceIsKeyConflict, TestBookSlot_RepeatWithDifferentSlotIsKeyConflict)
 - INV-004 — A cancelled booking is final and cannot be reactivated, and the schema rejects the transition from cancelled to active as well as the domain code; a new booking is needed. (check: test: TestBookSlot_RepeatAfterCancelCreatesNoNewBooking, TestBooking_CancelledStaysCancelled, TestBooking_CannotReactivate, TestBooking_NewBookingAfterCancelCreatesNewId, TestSchema_RejectsCancelledToActiveTransition)
 - INV-005 — A resource always has a name and a weekly working-hours schedule with at most one interval per weekday, each interval bound aligned to the half hour and inside a single UTC day. (check: test: TestCreateResource_RejectsEmptyName, TestCreateResource_RejectsIntervalCrossingMidnightUtc, TestCreateResource_RejectsMisalignedIntervalBound, TestCreateResource_RejectsMissingWorkingHours, TestCreateResource_RejectsTwoIntervalsOnOneWeekday)
@@ -67,8 +72,8 @@ Open decisions this card must not answer: DEC-031 (how rule-to-test coverage is 
 - testable_acceptance_criteria — gap_free
 - engineering_constraint_coverage — gap_free_by_non_applicability: not applicable — no requirement this candidate names declares `engineering_constraints:` and step 6c5 promoted none, so the card format's "omit the section entirely" applies.
 - architecture_traceability — gap_free
-- blocking_decisions_resolved — gap: blocking decisions: open and blocking: DEC-018, DEC-031, DEC-034 — the candidate waits on an unresolved DEC.
-- dependencies_resolved — gap: dependencies: CARD-007 (status 'blocked' does not resolve), CARD-008 (status 'blocked' does not resolve) — a declared dependency does not resolve.
+- blocking_decisions_resolved — gap: blocking decisions: open and blocking: DEC-018, DEC-031 — the candidate waits on an unresolved DEC.
+- dependencies_resolved — gap_free
 - design_seed_for_user_facing — gap_free_by_non_applicability: not applicable — the card's own `UI surface:` machine stamp reads `none` (step 6b, FR-061); there is no surface to seed.
 - open_subject_answered — gap_free
 
