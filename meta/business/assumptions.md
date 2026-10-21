@@ -35,3 +35,21 @@ Because slots are fixed at 30 minutes and aligned to the half hour, two bookings
 - check: "by 2026-11-30, when the API is specified, confirm that Customer (TERM-010) means the same thing on the service side and the gateway side, or record the difference as a language seam"
 
 The StudioGateway is the sole caller and the open-host-service relation captures the integration; the Customer term does not change meaning across that edge.
+
+## ASM-0005 · Generated HTTP plumbing honours the stable error contract for every failure
+- status: unvalidated
+- owner: roman.miakotin
+- source: architect critic, adr-writer, 2026-10-21
+- date: 2026-10-21
+- check: "by 2026-11-30, when the OpenAPI document and the generated server are set up, show that a malformed body, an unknown route and a wrong method all return a JSON object with a stable code (CON-004)"
+
+The generated net/http server, with a custom error handler where needed, returns the stable JSON error shape for malformed requests, unknown routes and wrong methods, not only for domain errors.
+
+## ASM-0006 · Every writer normalises the slot start before insert
+- status: unvalidated
+- owner: roman.miakotin
+- source: architect critic, adr-writer, 2026-10-21
+- date: 2026-10-21
+- check: "by 2026-11-30, when the storage layer is specified, the slot start is stored in one canonical UTC form (or as integer epoch seconds) so the unique index on the active slot compares equal starts as equal"
+
+The only path that inserts a booking parses the slot start into a single canonical UTC representation, so two spellings of the same instant cannot produce two index keys.

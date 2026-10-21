@@ -288,3 +288,93 @@ open:
     criteria_refs: [CON-004, CON-006]
     status: open
     blocks: [none]
+  - id: DEC-026
+    question: >-
+      ADR-0008 says its indexes keep the invariant true 'whatever the application code does', but neither index protects INV-004 (a cancelled booking is final): an UPDATE of a cancelled booking back to active succeeds whenever the slot is free. Where is the no-reactivation rule enforced: in the schema as well (a check or trigger forbidding the status transition), or only by a status-transition guard in the domain code? Raised by the critic as contested.
+    surfaced_from:
+      kind: ambiguity
+      ref: [INV-004, ADR-0008, AC-030]
+    alternatives:
+      - label: schema_guard_on_status
+        summary: "Forbid the cancelled-to-active transition in the schema with a trigger or check, in addition to the domain guard."
+        pros: []
+        cons: []
+      - label: domain_guard_only
+        summary: "Enforce the transition only in the domain code that is the sole writer of status, and scope ADR-0008's claim to INV-001 and INV-003."
+        pros: []
+        cons: []
+    criteria_refs: [FR-008]
+    status: open
+    blocks: [decompose]
+  - id: DEC-027
+    question: >-
+      A repeated booking request with the same idempotency key hits both unique indexes of ADR-0008 at once, and a repeat with a different payload (ADR-0001) cannot be detected by an index at all. How is a replay resolved: look the key up first and compare the payload before inserting, or insert and classify the constraint violation afterwards by reading the key? Raised by the critic as contested; related to but distinct from DEC-012, which orders the not-in-the-past check.
+    surfaced_from:
+      kind: ambiguity
+      ref: [INV-003, ADR-0001, ADR-0008, AC-023]
+    alternatives:
+      - label: lookup_key_then_insert
+        summary: "Read the idempotency key first, return or reject by payload comparison, and insert only when the key is new."
+        pros: []
+        cons: []
+      - label: insert_then_classify_violation
+        summary: "Insert first, and on a unique violation read the key to decide between the original booking, a payload mismatch and a taken slot."
+        pros: []
+        cons: []
+    criteria_refs: [FR-006, NFR-001]
+    status: open
+    blocks: [decompose]
+  - id: DEC-028
+    question: >-
+      The concurrency design of ADR-0006 and ADR-0008 relies on a busy timeout and WAL to absorb 50 writers, but a read followed by a write in a deferred transaction can fail with a busy error that the timeout does not retry, which would break the NFR-001 test with lock errors. Which write path is used: single autocommit inserts with no read-then-write transaction, or immediate transactions? Note that ADR-0006's claim that the driver has no connection-string option for immediate transactions is unverified; a web search suggests the driver documents a transaction-locking DSN option, which must be checked against the pinned version. Raised by the critic as contested.
+    surfaced_from:
+      kind: ambiguity
+      ref: [NFR-001, ADR-0006, ADR-0008]
+    alternatives:
+      - label: autocommit_insert_only
+        summary: "Use single autocommit inserts and lookups after a violation, with no read-then-write transaction, backed by WAL and a busy timeout."
+        pros: []
+        cons: []
+      - label: immediate_transactions
+        summary: "Run booking writes in immediate transactions so the write lock is taken at the start, accepting queueing on the lock."
+        pros: []
+        cons: []
+    criteria_refs: [NFR-001, FR-005]
+    status: open
+    blocks: [decompose]
+  - id: DEC-029
+    question: >-
+      ADR-0005 and ADR-0008 treat the single instance of the service as a premise, but nothing enforces it: an overlapping deploy or a second host on a network disk would break WAL and could race the migration runner of ADR-0007. Should the single-instance and local-disk premises be enforced (a lock file or exclusive lock, a singleton supervisor unit) or only documented? Raised by the critic as contested.
+    surfaced_from:
+      kind: ambiguity
+      ref: [ADR-0005, ADR-0007, ADR-0008]
+    alternatives:
+      - label: enforce_single_instance
+        summary: "Enforce it with an exclusive lock on the database or a lock file, and a singleton supervisor unit."
+        pros: []
+        cons: []
+      - label: document_only
+        summary: "Document the single-instance and local-disk requirement in the deployment notes and rely on SQLite file locking."
+        pros: []
+        cons: []
+    criteria_refs: [CON-005]
+    status: open
+    blocks: [none]
+  - id: DEC-030
+    question: >-
+      ADR-0009 rejects hand-written handlers because there is 'no machine-readable contract', which the strongest version of that alternative (hand-written handlers plus a hand-maintained OpenAPI document checked by contract tests) would not accept; its real remaining cost is drift and duplicated types. Should ADR-0009's rejection reason be restated on the drift argument, or kept as written? Raised by the critic as contested; the decision itself is not reopened.
+    surfaced_from:
+      kind: ambiguity
+      ref: [ADR-0009, CON-002]
+    alternatives:
+      - label: restate_rejection_on_drift
+        summary: "Amend ADR-0009 so the rejection of the hand-written alternative rests on drift and duplicated type definitions."
+        pros: []
+        cons: []
+      - label: keep_as_written
+        summary: "Keep ADR-0009 as written; the decision stands on the project's contract-first standard."
+        pros: []
+        cons: []
+    criteria_refs: [CON-002, CON-004]
+    status: open
+    blocks: [none]
