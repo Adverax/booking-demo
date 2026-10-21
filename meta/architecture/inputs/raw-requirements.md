@@ -56,3 +56,8 @@
 - Instants are stored as integer UTC epoch seconds, converted to RFC 3339 only at the API boundary; the current time is obtained through an injectable clock (CON). Source: ADR-0013, 2026-10-21.
 # processed: 2026-10-21 → FR-006 (AC-043..AC-046), FR-005 (AC-037), TERM-011..TERM-013
 - Sameness: two resources are the same if their ids are equal; two bookings occupy the same slot if resource id and canonical slot start are equal; idempotency keys and customer names are compared byte for byte as received, with no trimming and no case folding; a repeated request has the same payload as the stored booking only if resource id, slot start and customer name are all equal (FR, invariant). Source: ADR-0015, 2026-10-21.
+- A booking request for a slot whose start is earlier than the current time (read from the injectable clock) is rejected with a stable error code; a slot whose start equals or follows the current time is accepted (FR, invariant). Source: ADR-0016, 2026-10-21.
+- The performance category (latency and throughput targets) is not applicable to the first release: the brief states no figure and the 50-request release test verifies correctness under concurrency only; revisit when the studio supplies a metric and a threshold (NFR coverage). Source: ADR-0017, 2026-10-21.
+- An availability request whose range start is after its end is rejected with a stable error code (FR). Source: ADR-0018, 2026-10-21.
+- A booking request with an empty customer name is rejected with a stable error code and creates nothing (FR). Source: ADR-0018, 2026-10-21.
+- A booking request with an empty idempotency key is rejected with a stable error code and creates nothing (FR). Source: ADR-0018, 2026-10-21.

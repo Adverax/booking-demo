@@ -74,3 +74,23 @@ resolved:
     resolved_by: ADR-0015
     resolution_label: exact_comparison
     date: 2026-10-21
+  - id: DEC-005
+    question: "What counts as a slot in the past"
+    resolved_by: ADR-0016
+    resolution_label: start_before_now
+    date: 2026-10-21
+  - id: DEC-006
+    question: "Performance targets for the first release"
+    resolved_by: ADR-0017
+    resolution_label: not_applicable
+    date: 2026-10-21
+  - id: DEC-016
+    question: "Input-validation paths get acceptance criteria now"
+    resolved_by: ADR-0018
+    resolution_label: add_validation_acs
+    date: 2026-10-21
+  - id: DEC-034
+    question: "Aligning evidence citations across trace rows"
+    resolved_by: ADR-0019
+    resolution_label: align_row_citations
+    date: 2026-10-21

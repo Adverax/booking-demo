@@ -1,41 +1,5 @@
 # tier: medium
 open:
-  - id: DEC-005
-    question: >-
-      What exactly is 'in the past' for a booking: a slot whose start is before now, or a slot whose end is before now (so a slot already in progress is still bookable)?
-    surfaced_from:
-      kind: ambiguity
-      ref: [INV-002, FR-005]
-    alternatives:
-      - label: start_before_now
-        summary: Reject when the slot start is earlier than the current time.
-        pros: []
-        cons: []
-      - label: end_before_now
-        summary: Reject only when the slot has fully ended.
-        pros: []
-        cons: []
-    criteria_refs: [FR-005]
-    status: open
-    blocks: [none]
-  - id: DEC-006
-    question: >-
-      What latency or throughput targets apply to the API (for example p95 per endpoint at a stated request rate)? The brief states none; no number is invented here.
-    surfaced_from:
-      kind: nfr
-      ref: [FR-005]
-    alternatives:
-      - label: target_defined
-        summary: Operator names a metric and threshold, formalized as an NFR.
-        pros: []
-        cons: []
-      - label: not_applicable
-        summary: Operator states why the category does not apply to this service.
-        pros: []
-        cons: []
-    criteria_refs: [FR-005]
-    status: open
-    blocks: [none]
   - id: DEC-007
     question: >-
       Is there an uptime or recovery target for the service? The brief states none.
@@ -180,24 +144,6 @@ open:
     criteria_refs: [FR-003, FR-005]
     status: open
     blocks: [none]
-  - id: DEC-016
-    question: >-
-      Input-validation paths of availability and booking are not covered by acceptance criteria (a start after the end of the range, an empty customer name, an empty idempotency key): add them now, or leave them to the API specification?
-    surfaced_from:
-      kind: ambiguity
-      ref: [FR-004, FR-005, FR-006]
-    alternatives:
-      - label: add_validation_acs
-        summary: "Add negative ACs for these inputs to requirements.yml now, as FR-001 already does for an empty name."
-        pros: []
-        cons: []
-      - label: leave_to_api_spec
-        summary: "Leave input validation to the API specification phase."
-        pros: []
-        cons: []
-    criteria_refs: [FR-004, FR-005]
-    status: open
-    blocks: [none]
   - id: DEC-017
     question: >-
       Concurrency is proven only for identical concurrent requests: should the model also cover a cancel racing a booking of the same slot, and concurrent same-key requests with different payloads (ADR-0001)?
@@ -340,23 +286,5 @@ open:
         pros: []
         cons: []
     criteria_refs: [CON-005]
-    status: open
-    blocks: [none]
-  - id: DEC-034
-    question: >-
-      Evidence citations differ between trace rows: FR-005 cites no ADR-0004 although it relies on the working-hours shape (FR-003 cites it), and NFR-001 omits COMP-001 although AC-031 sends 50 HTTP requests. Align the citations, or leave them since the evidence is reachable through other rows? Raised by the critic as contested.
-    surfaced_from:
-      kind: ambiguity
-      ref: [FR-005, NFR-001, ADR-0004]
-    alternatives:
-      - label: align_row_citations
-        summary: "Add ADR-0004 to FR-005 and COMP-001 to NFR-001 so the rows are consistent."
-        pros: []
-        cons: []
-      - label: leave_rows_as_is
-        summary: "Leave the rows; the evidence is transitively reachable."
-        pros: []
-        cons: []
-    criteria_refs: [FR-005, NFR-001]
     status: open
     blocks: [none]
