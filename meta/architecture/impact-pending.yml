@@ -80,3 +80,28 @@ entries:
     field: 'req: FR-008'
   sources_absent:
   - meta/kanban/cards
+- id: FR-004
+  at: '2026-10-21T16:50:38Z'
+  commit: 4d9e30b
+  commit_reason: ok
+  radius_count: 4
+  radius:
+  - id: CAP-002
+    kind: capability
+    artifact: meta/architecture/domain/capabilities.yml
+    field: 'requirements[1]: FR-004'
+  - id: CARD-001
+    kind: card
+    artifact: meta/kanban/cards/CARD-001.md
+    field: '- Write `api/openapi.yaml` describing the whole HTTP surface the requirements
+      name: create, list and read a resource (F…'
+  - id: CARD-008
+    kind: card
+    artifact: meta/kanban/cards/CARD-008.md
+    field: '- For a resource and a date range of at most 14 days, list the free slots:
+      30 minutes long, aligned to the half hour, i…'
+  - id: trace.yml#FR-004
+    kind: trace_entry
+    artifact: meta/architecture/trace.yml
+    field: 'req: FR-004'
+  sources_absent: []
