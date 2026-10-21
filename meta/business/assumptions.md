@@ -1,0 +1,28 @@
+# Assumptions
+
+## ASM-0001 · AC-030 is reachable through an internal state-machine guard
+- status: unvalidated
+- owner: roman.miakotin
+- source: architect critic, capability-mapping and domain-extraction, 2026-10-21
+- date: 2026-10-21
+- check: "by synthesis, AC-030 names the entry point that attempts to reactivate a cancelled booking, or is reworded as a guard-level property; settled by 2026-11-30 when the API routes are specified"
+
+The refusal to set a cancelled booking active again is enforced by an internal guard of the Booking aggregate, with no public reactivation route.
+
+## ASM-0002 · Listing past slots as free in availability is acceptable
+- status: unvalidated
+- owner: roman.miakotin
+- source: architect critic, domain-extraction, 2026-10-21
+- date: 2026-10-21
+- check: "an acceptance criterion states what availability returns for a range that includes past times, settled by 2026-11-30 when FR-003 acceptance criteria are reviewed"
+
+A free slot is defined without the not-in-the-past condition, so the studio's frontend accepts that availability may list a past slot that a booking then rejects.
+
+## ASM-0003 · Overlap equals the same slot, so INV-001 needs no partial-overlap test
+- status: unvalidated
+- owner: roman.miakotin
+- source: architect critic, domain-extraction, 2026-10-21
+- date: 2026-10-21
+- check: "slots stay fixed 30-minute half-hour-aligned (FR-003); revisit by 2026-11-30 and whenever slot length or alignment becomes configurable"
+
+Because slots are fixed at 30 minutes and aligned to the half hour, two bookings overlap only when they are for the same slot.

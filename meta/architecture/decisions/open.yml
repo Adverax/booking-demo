@@ -126,3 +126,129 @@ open:
     criteria_refs: [CON-006]
     status: open
     blocks: [none]
+  - id: DEC-012
+    question: >-
+      A booking request repeats an existing idempotency key and its slot has meanwhile started or passed: should the key lookup run before the not-in-the-past validation (so the replay returns the original booking), or should validation run first (so the replay is rejected as past)? Raised by the critics as a contested reading of INV-002 and INV-003.
+    surfaced_from:
+      kind: ambiguity
+      ref: [INV-002, INV-003, ADR-0002]
+    alternatives:
+      - label: lookup_first
+        summary: "Look the key up before validating: a replay always returns the original booking, even when its slot has since started."
+        pros: []
+        cons: []
+      - label: validate_first
+        summary: "Validate the request first: a replay whose slot is now in the past is rejected as past."
+        pros: []
+        cons: []
+    criteria_refs: [FR-005, FR-006]
+    status: open
+    blocks: [none]
+  - id: DEC-013
+    question: >-
+      Should the rules created by ADR-0001..0004 be mirrored into the model now (reword INV-003 and INV-005, add acceptance criteria for the mismatching-key, repeat-after-cancel, repeated-cancel and malformed-working-hours paths), or left for later phases? Raised by the critics as a contested divergence between accepted ADRs and invariants/ACs.
+    surfaced_from:
+      kind: ambiguity
+      ref: [INV-003, INV-005, ADR-0001, ADR-0004]
+    alternatives:
+      - label: mirror_now
+        summary: "Reword INV-003 and INV-005 and add the missing ACs to requirements.yml now."
+        pros: []
+        cons: []
+      - label: defer_to_later
+        summary: "Keep requirements as extracted and add the ACs when cards are cut or tests are named."
+        pros: []
+        cons: []
+    criteria_refs: [FR-001, FR-006, FR-007, NFR-003]
+    status: open
+    blocks: [none]
+  - id: DEC-014
+    question: >-
+      An idempotent no-op (a repeated cancel under ADR-0003, a repeated booking with the same key under FR-006) succeeds without a state change: does it emit its domain event again, or none? Raised by the critics as contested for EVT-002 and EVT-003.
+    surfaced_from:
+      kind: ambiguity
+      ref: [EVT-002, EVT-003, ADR-0003]
+    alternatives:
+      - label: no_event_on_noop
+        summary: "Emit an event only when state actually changes; a no-op returns success silently."
+        pros: []
+        cons: []
+      - label: event_on_every_success
+        summary: "Emit the event on every successful command, including repeats."
+        pros: []
+        cons: []
+    criteria_refs: [FR-006, FR-007]
+    status: open
+    blocks: [none]
+  - id: DEC-015
+    question: >-
+      Booking validation (INV-002) and availability (FR-003) read working hours owned by the Resource aggregate, but CAP-003 lists only the Booking aggregate and CAP-002 lists none: should these cross-aggregate read dependencies be recorded on the capabilities?
+    surfaced_from:
+      kind: ambiguity
+      ref: [CAP-002, CAP-003, INV-002, INV-005]
+    alternatives:
+      - label: record_read_dependencies
+        summary: "List the Resource aggregate as a read dependency of CAP-002 and CAP-003."
+        pros: []
+        cons: []
+      - label: keep_capabilities_as_is
+        summary: "Leave the capabilities unchanged: read-only lookups need no aggregate link."
+        pros: []
+        cons: []
+    criteria_refs: [FR-003, FR-005]
+    status: open
+    blocks: [none]
+  - id: DEC-016
+    question: >-
+      Input-validation paths of availability and booking are not covered by acceptance criteria (a start after the end of the range, an empty customer name, an empty idempotency key): add them now, or leave them to the API specification?
+    surfaced_from:
+      kind: ambiguity
+      ref: [FR-004, FR-005, FR-006]
+    alternatives:
+      - label: add_validation_acs
+        summary: "Add negative ACs for these inputs to requirements.yml now, as FR-001 already does for an empty name."
+        pros: []
+        cons: []
+      - label: leave_to_api_spec
+        summary: "Leave input validation to the API specification phase."
+        pros: []
+        cons: []
+    criteria_refs: [FR-004, FR-005]
+    status: open
+    blocks: [none]
+  - id: DEC-017
+    question: >-
+      Concurrency is proven only for identical concurrent requests: should the model also cover a cancel racing a booking of the same slot, and concurrent same-key requests with different payloads (ADR-0001)?
+    surfaced_from:
+      kind: ambiguity
+      ref: [INV-001, INV-003, ADR-0001]
+    alternatives:
+      - label: extend_concurrency_acs
+        summary: "Add ACs and property-test cases for both races."
+        pros: []
+        cons: []
+      - label: rely_on_property_tests
+        summary: "Rely on the existing property-test cases EC-001..003 and treat the other shapes as implied."
+        pros: []
+        cons: []
+    criteria_refs: [FR-005, FR-006, FR-007]
+    status: open
+    blocks: [none]
+  - id: DEC-018
+    question: >-
+      NFR-001 (50 simultaneous bookings, exactly one succeeds) is filed under the scalability category, but the brief frames it as a correctness release criterion with no load figure: keep that label, or reclassify it?
+    surfaced_from:
+      kind: ambiguity
+      ref: [NFR-001]
+    alternatives:
+      - label: keep_scalability_label
+        summary: "Keep NFR-001 under scalability as the closest fixed category."
+        pros: []
+        cons: []
+      - label: reclassify_as_correctness
+        summary: "Record it as a correctness release criterion and leave the scalability category open instead of marked covered."
+        pros: []
+        cons: []
+    criteria_refs: [NFR-001]
+    status: open
+    blocks: [none]
