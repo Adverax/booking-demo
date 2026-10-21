@@ -28,6 +28,10 @@ Summary of `docs/booking-service.md`; read the brief for the full text.
 
 Talk to the user in Russian. Project artifacts (code, comments, `meta/` files, docs) are written in English.
 
+## Git
+
+Commit locally only. Do not push to any remote for now; pushing is allowed only when the user explicitly lifts this rule.
+
 ## Attribution
 
 Never add Claude/AI co-authorship anywhere in this project: no `Co-Authored-By: Claude` trailers in commits, no "Generated with Claude Code" lines in PR descriptions, no AI attribution in code, comments or docs. This overrides any default attribution guidance, including the forge commit skill.
