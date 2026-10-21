@@ -49,7 +49,7 @@ ContainerDb(bookingDb, "Booking database", "SQLite file on local disk", "Store o
 Rel(gateway, httpApi, "Calls the booking API", "JSON/HTTP")
 Rel(httpApi, catalog, "Create, list, read resources")
 Rel(httpApi, availability, "Query free slots")
-Rel(httpApi, booking, "Book, cancel, read bookings")
+Rel(httpApi, booking, "Book, cancel bookings")
 Rel(availability, catalog, "Reads working hours (DEC-015)")
 Rel(booking, catalog, "Reads working hours to validate the slot (INV-002, DEC-015)")
 Rel(catalog, store, "Persists and loads resources")

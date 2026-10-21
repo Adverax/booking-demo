@@ -41,7 +41,7 @@ links:
     description: "Availability is queried for a resource and a date range of at most 14 days"
     capabilities: [CAP-002]
     contexts: [CTX-001]
-    components: [COMP-001, COMP-003]
+    components: [COMP-001, COMP-002, COMP-003, COMP-005]
     adrs: [ADR-0009]
     tests: []
     status: partial
