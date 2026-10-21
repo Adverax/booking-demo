@@ -1,0 +1,21 @@
+resolved:
+  - id: DEC-001
+    question: "Idempotency key repeated with a different payload"
+    resolved_by: ADR-0001
+    resolution_label: reject_conflict
+    date: 2026-10-21
+  - id: DEC-002
+    question: "Idempotency key repeated after the booking was cancelled"
+    resolved_by: ADR-0002
+    resolution_label: return_cancelled_original
+    date: 2026-10-21
+  - id: DEC-003
+    question: "Cancelling an already cancelled booking"
+    resolved_by: ADR-0003
+    resolution_label: idempotent_success
+    date: 2026-10-21
+  - id: DEC-004
+    question: "Shape of weekly working hours"
+    resolved_by: ADR-0004
+    resolution_label: single_interval_per_day
+    date: 2026-10-21
