@@ -90,24 +90,6 @@ open:
     criteria_refs: [CON-006]
     status: open
     blocks: [none]
-  - id: DEC-012
-    question: >-
-      A booking request repeats an existing idempotency key and its slot has meanwhile started or passed: should the key lookup run before the not-in-the-past validation (so the replay returns the original booking), or should validation run first (so the replay is rejected as past)? Raised by the critics as a contested reading of INV-002 and INV-003.
-    surfaced_from:
-      kind: ambiguity
-      ref: [INV-002, INV-003, ADR-0002]
-    alternatives:
-      - label: lookup_first
-        summary: "Look the key up before validating: a replay always returns the original booking, even when its slot has since started."
-        pros: []
-        cons: []
-      - label: validate_first
-        summary: "Validate the request first: a replay whose slot is now in the past is rejected as past."
-        pros: []
-        cons: []
-    criteria_refs: [FR-005, FR-006]
-    status: open
-    blocks: [none]
   - id: DEC-014
     question: >-
       An idempotent no-op (a repeated cancel under ADR-0003, a repeated booking with the same key under FR-006) succeeds without a state change: does it emit its domain event again, or none? Raised by the critics as contested for EVT-002 and EVT-003.

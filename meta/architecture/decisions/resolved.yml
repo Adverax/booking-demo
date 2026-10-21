@@ -94,3 +94,8 @@ resolved:
     resolved_by: ADR-0019
     resolution_label: align_row_citations
     date: 2026-10-21
+  - id: DEC-012
+    question: "Order of checks when a repeated key arrives after its slot has started"
+    resolved_by: ADR-0020
+    resolution_label: validate_first_replay_check_on_past_rejection
+    date: 2026-10-21
