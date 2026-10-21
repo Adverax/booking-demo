@@ -1,0 +1,28 @@
+# generated_by: architect-capability-mapping
+# generated_at: 2026-10-21T00:00:00Z
+# tier: medium
+capabilities:
+  - id: CAP-001
+    name: Resource catalog
+    description: Publishing bookable resources with their weekly working hours, and letting operators and customers list and read them.
+    events: [EVT-001]
+    commands: [CMD-001]
+    aggregates: [AGG-001]
+    stories: [US-001, US-002, US-003]
+    requirements: [FR-001, FR-002]
+  - id: CAP-002
+    name: Availability search
+    description: Showing the free 30-minute slots of a resource over a date range of at most 14 days, derived from working hours and active bookings. Read-only, produces no events.
+    events: []
+    commands: []
+    aggregates: []
+    stories: [US-004]
+    requirements: [FR-003, FR-004]
+  - id: CAP-003
+    name: Slot booking
+    description: Booking one slot with an idempotency key, returning the original booking on retries, and cancelling bookings so the slot is freed immediately.
+    events: [EVT-002, EVT-003]
+    commands: [CMD-002, CMD-003]
+    aggregates: [AGG-002]
+    stories: [US-005, US-006, US-007]
+    requirements: [FR-005, FR-006, FR-007, FR-008, NFR-001]
