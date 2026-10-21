@@ -20,11 +20,12 @@
 '   - COMP-003 and COMP-004 read working hours owned by the Resource aggregate (AGG-001) through
 '     COMP-002; whether this cross-aggregate read is recorded in the model is open (DEC-015).
 '   - COMP-004 relies on the schema-level unique indexes of ADR-0008 in COMP-005: a constraint
-'     violation is mapped to a conflict. How a same-key replay is resolved (lookup first or
-'     insert first, payload mismatch per ADR-0001) is open (DEC-027); busy-error handling under
-'     50 concurrent writers is open (DEC-028); protection of INV-004 against reactivation at the
-'     schema level is open (DEC-026); the order of key lookup versus the not-in-the-past check is
-'     open (DEC-012); the exact meaning of "in the past" is open (DEC-005).
+'     violation is mapped to a conflict. A same-key replay is resolved insert first, payload
+'     mismatch per ADR-0001 (ADR-0011, DEC-027 resolved); busy-error handling under 50 concurrent
+'     writers is decided (ADR-0012, DEC-028 resolved); INV-004 is protected against reactivation
+'     at the schema level (ADR-0010, DEC-026 resolved); the order of key lookup versus the
+'     not-in-the-past check is open (DEC-012); "in the past" means slot start before now
+'     (ADR-0016, DEC-005 resolved).
 '   - Whether idempotent no-ops re-emit domain events is open (DEC-014). Events are in-process
 '     facts only: no broker, no subscriber in scope (policies: none).
 '   - COMP-006 applies versioned SQL embedded with go:embed in one transaction at startup,

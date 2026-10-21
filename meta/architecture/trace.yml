@@ -42,30 +42,30 @@ links:
     capabilities: [CAP-002]
     contexts: [CTX-001]
     components: [COMP-001, COMP-002, COMP-003, COMP-005]
-    adrs: [ADR-0009]
+    adrs: [ADR-0009, ADR-0018]
     tests: []
     status: partial
-    notes: "Range input-validation acceptance criteria are open (DEC-016)."
+    notes: "Range input-validation acceptance criteria are defined (ADR-0018, DEC-016 resolved; AC-054)."
 
   - req: FR-005
     description: "A customer books one slot with name and idempotency key; inside working hours, not in the past, no overlap under concurrency"
     capabilities: [CAP-003]
     contexts: [CTX-001]
     components: [COMP-001, COMP-002, COMP-004, COMP-005]
-    adrs: [ADR-0006, ADR-0008, ADR-0009, ADR-0015]
+    adrs: [ADR-0004, ADR-0006, ADR-0008, ADR-0009, ADR-0013, ADR-0015, ADR-0016, ADR-0018]
     tests: []
     status: partial
-    notes: "Open: meaning of 'in the past' (DEC-005), busy-error handling under concurrent writers (DEC-028), cancel-vs-book race coverage (DEC-017)."
+    notes: "'In the past' means slot start before now (ADR-0016, DEC-005 resolved; AC-050/AC-051); busy-error handling under concurrent writers is decided (ADR-0012, DEC-028 resolved); empty customer name has an AC (ADR-0018, DEC-016 resolved; AC-052). Open: cancel-vs-book race coverage (DEC-017)."
 
   - req: FR-006
     description: "Repeating a booking with the same idempotency key and identical payload returns the original booking, also when cancelled; a differing payload is a key conflict; key is globally unique and compared exactly"
     capabilities: [CAP-003]
     contexts: [CTX-001]
     components: [COMP-001, COMP-004, COMP-005]
-    adrs: [ADR-0001, ADR-0002, ADR-0008, ADR-0011, ADR-0015]
+    adrs: [ADR-0001, ADR-0002, ADR-0008, ADR-0011, ADR-0015, ADR-0018]
     tests: []
     status: partial
-    notes: "Replay resolution against the two unique indexes is insert-then-classify (ADR-0011, DEC-027 resolved). Open: key lookup before past-slot validation (DEC-012), event re-emission on no-op (DEC-014)."
+    notes: "Replay resolution against the two unique indexes is insert-then-classify (ADR-0011, DEC-027 resolved); empty idempotency key has an AC (ADR-0018, DEC-016 resolved; AC-053). Open: key lookup before past-slot validation (DEC-012), event re-emission on no-op (DEC-014)."
 
   - req: FR-007
     description: "Anyone with the booking id can cancel; a cancelled booking frees its slot immediately; a repeated cancel succeeds"
@@ -91,11 +91,11 @@ links:
     description: "50 simultaneous booking requests for one slot yield exactly 1 successful booking"
     capabilities: [CAP-003]
     contexts: [CTX-001]
-    components: [COMP-004, COMP-005]
+    components: [COMP-001, COMP-004, COMP-005]
     adrs: [ADR-0006, ADR-0008]
     tests: []
     status: partial
-    notes: "Depends on open DEC-028 (busy errors under 50 writers) and DEC-029 (single-instance premise); category label open (DEC-018)."
+    notes: "Busy errors under 50 writers are decided (ADR-0012, DEC-028 resolved). Depends on open DEC-029 (single-instance premise); category label open (DEC-018)."
 
   - req: NFR-002
     description: "End-to-end API scenarios pass 100% on a freshly created database"

@@ -18,7 +18,7 @@
 '   - The SQLite database is a file on local disk, opened in-process by the binary; it is
 '     drawn as its own data container because it is the store of record, not a separate server.
 '   - The single-instance premise (one process per database file) is not enforced yet: open DEC-029.
-'   - SQLite busy handling for 50 concurrent writers (WAL, busy timeout, transaction mode) is open: DEC-028.
+'   - SQLite busy handling for 50 concurrent writers (WAL, busy timeout, transaction mode) is decided: ADR-0012 (DEC-028 resolved).
 '   - Logging, metrics and tracing requirements are open (DEC-010); none are drawn.
 ' ============================================================
 title Containers: Booking Service
