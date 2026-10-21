@@ -1,0 +1,15 @@
+{
+  "vulnerabilities": [],
+  "licenses": [
+    {
+      "id": "MIT",
+      "reason": "Permissive licence, compatible with this project's own MIT licence; used by the project itself and by github.com/dustin/go-humanize, github.com/mattn/go-isatty, github.com/ncruces/go-strftime (go-licenses v2.0.1 report, 2026-10-22). Owner: roman.miakotin.",
+      "expires": "2027-10-22"
+    },
+    {
+      "id": "BSD-3-Clause",
+      "reason": "Permissive licence, compatible with MIT distribution of the binary (keep the notices); used by modernc.org/sqlite and its modernc.org/libc, mathutil, memory dependencies, github.com/google/uuid, github.com/remyoudompheng/bigfft, golang.org/x/sys (go-licenses v2.0.1 report, 2026-10-22). Owner: roman.miakotin.",
+      "expires": "2027-10-22"
+    }
+  ]
+}

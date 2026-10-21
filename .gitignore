@@ -1,6 +1,7 @@
 .idea/
 *.db
 /bin/
+/.audit/
 
 # ─── forge ─────────────────────────────── git_tracking.preset: solo ───
 # Regenerate: /forge:init gitignore
