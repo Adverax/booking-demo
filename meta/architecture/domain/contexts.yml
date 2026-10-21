@@ -1,0 +1,31 @@
+# generated_by: architect-context-mapping
+# generated_at: 2026-10-21T00:00:00Z
+# tier: medium
+# Rationale for a single context: the model is genuinely one bounded context.
+# - One ubiquitous language: every glossary term (resource, slot, booking,
+#   working hours, idempotency key) has one meaning across all three capabilities.
+# - One owner and one rate of change: the brief describes one small service with
+#   one team; no capability is changed independently of the others.
+# - Availability search (CAP-002) is a read-only projection over Resource and
+#   Booking; Slot booking (CAP-003) enforces INV-001/INV-002 against the Resource
+#   working hours inside one transaction. Splitting Catalog from Booking would
+#   turn those same-transaction invariants into cross-context consistency, with
+#   no language or ownership difference to justify it (CON-003, CON-005: one
+#   binary, one SQLite store).
+# - Resource (lifecycle: published, long-lived) and Booking (lifecycle: active
+#   until cancelled) differ in lifecycle, but both are internal modules of one
+#   context, not separate contexts.
+contexts:
+  - id: CTX-001
+    name: Booking
+    description: Publishing bookable resources with weekly working hours, searching free 30-minute slots, and booking and cancelling slots idempotently. The whole service is one coherent model.
+    capabilities: [CAP-001, CAP-002, CAP-003]
+    aggregates: [AGG-001, AGG-002]
+    ubiquitous_language: [TERM-001, TERM-002, TERM-003, TERM-004, TERM-005, TERM-006, TERM-007, TERM-008, TERM-009, TERM-010]
+
+context_map:
+  - from: CTX-001
+    to: EXT-001
+    relationship: open_host_service
+    integration: sync_api
+    description: CTX-001 serves StudioGateway (EXT-001, inbound), its only caller; the service exposes one JSON-over-HTTP API (CON-004) with stable error codes. Authentication stays in the gateway (CON-006). Fixed by the brief, not an open choice.
