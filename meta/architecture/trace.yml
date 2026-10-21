@@ -52,20 +52,20 @@ links:
     capabilities: [CAP-003]
     contexts: [CTX-001]
     components: [COMP-001, COMP-002, COMP-004, COMP-005]
-    adrs: [ADR-0004, ADR-0006, ADR-0008, ADR-0009, ADR-0013, ADR-0015, ADR-0016, ADR-0018]
+    adrs: [ADR-0004, ADR-0006, ADR-0008, ADR-0009, ADR-0013, ADR-0015, ADR-0016, ADR-0018, ADR-0020]
     tests: []
     status: partial
-    notes: "'In the past' means slot start before now (ADR-0016, DEC-005 resolved; AC-050/AC-051); busy-error handling under concurrent writers is decided (ADR-0012, DEC-028 resolved); empty customer name has an AC (ADR-0018, DEC-016 resolved; AC-052). Open: cancel-vs-book race coverage (DEC-017)."
+    notes: "'In the past' means slot start before now (ADR-0016, DEC-005 resolved; AC-050/AC-051); a past-slot request whose idempotency key matches an existing booking with identical payload is a replay, not a rejection (ADR-0020, DEC-012 resolved; AC-057); busy-error handling under concurrent writers is decided (ADR-0012, DEC-028 resolved); empty customer name has an AC (ADR-0018, DEC-016 resolved; AC-052). Open: cancel-vs-book race coverage (DEC-017)."
 
   - req: FR-006
     description: "Repeating a booking with the same idempotency key and identical payload returns the original booking, also when cancelled; a differing payload is a key conflict; key is globally unique and compared exactly"
     capabilities: [CAP-003]
     contexts: [CTX-001]
     components: [COMP-001, COMP-004, COMP-005]
-    adrs: [ADR-0001, ADR-0002, ADR-0008, ADR-0011, ADR-0015, ADR-0018]
+    adrs: [ADR-0001, ADR-0002, ADR-0008, ADR-0011, ADR-0015, ADR-0018, ADR-0020]
     tests: []
     status: partial
-    notes: "Replay resolution against the two unique indexes is insert-then-classify (ADR-0011, DEC-027 resolved); empty idempotency key has an AC (ADR-0018, DEC-016 resolved; AC-053). Open: key lookup before past-slot validation (DEC-012), event re-emission on no-op (DEC-014)."
+    notes: "Replay resolution against the two unique indexes is insert-then-classify (ADR-0011, DEC-027 resolved); empty idempotency key has an AC (ADR-0018, DEC-016 resolved; AC-053); the idempotency key is checked before the past-slot rejection, so a late replay returns the original booking (ADR-0020, DEC-012 resolved; AC-055, AC-056, AC-058). Open: event re-emission on no-op (DEC-014)."
 
   - req: FR-007
     description: "Anyone with the booking id can cancel; a cancelled booking frees its slot immediately; a repeated cancel succeeds"
