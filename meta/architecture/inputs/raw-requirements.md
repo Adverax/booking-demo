@@ -66,4 +66,5 @@
 - A booking request with an empty customer name is rejected with a stable error code and creates nothing (FR). Source: ADR-0018, 2026-10-21.
 # processed: 2026-10-21 → FR-006 (AC-053)
 - A booking request with an empty idempotency key is rejected with a stable error code and creates nothing (FR). Source: ADR-0018, 2026-10-21.
+# processed: 2026-10-21 -> FR-006 (AC-055, AC-056, AC-058), FR-005 (AC-057)
 - When a booking request is rejected because its slot start is earlier than the current time, the service first looks up its idempotency key: a stored booking with the same payload is returned as the original booking, a stored booking with a different payload is the key conflict, and no stored booking means the request is rejected as a past slot (FR, invariant). Source: ADR-0020, 2026-10-21.

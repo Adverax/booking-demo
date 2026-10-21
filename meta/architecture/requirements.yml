@@ -155,6 +155,8 @@ functional:
       of the same resource never overlap, also under concurrent requests. A slot is in the past when its
       start is earlier than the current time; a slot whose start equals the current time is accepted.
       A booking with an empty customer name is rejected with a stable error code and creates nothing.
+      A request for a past slot whose idempotency key has no stored booking is rejected as a past
+      slot and creates nothing; when the key is already stored, the repeat is resolved by FR-006 instead.
     source: [US-005]
     acceptance:
       - id: AC-014
@@ -230,6 +232,13 @@ functional:
         then: the response is a 4xx JSON error with a stable code field and nothing is persisted
         kind: negative
         test: TestBookSlot_RejectsEmptyCustomerName
+      - id: AC-057
+        given: a resource open Mon-Fri 09:00-17:00 UTC, an injected clock reading Monday 09:00:01 UTC, and no booking stored under key K9
+        when: customer "Ann" books the Monday 09:00 slot, which started 1 second ago, with the unknown key K9
+        then: the response is a past-slot 4xx JSON error with a stable code field and no booking is stored under K9
+        kind: negative
+        test: TestBookSlot_UnknownKeyForPastSlotIsRejectedAsPast
+        invariant: INV-002
     engineering_constraints:
       - id: EC-001
         statement: For any set of concurrent booking requests for overlapping slots of one resource, at most one active booking exists afterwards
@@ -238,9 +247,9 @@ functional:
         invariant: INV-001
         test: PropertyTest_Booking_NoOverlapUnderConcurrency
     clarification:
-      scope: "In: the slot-identity relation (ADR-0015) - two bookings occupy the same slot only if resource id and canonical UTC slot start are equal; a slot is in the past when its start is earlier than the injected clock's now, start == now is accepted (ADR-0016); an empty customer name is rejected (ADR-0018). Out: partial overlaps, which cannot occur with fixed 30-minute slots (ASM-0003); the order of the past check against the idempotent replay (DEC-012); oversized names and the error-code names (API specification)."
+      scope: "In: the slot-identity relation (ADR-0015) - two bookings occupy the same slot only if resource id and canonical UTC slot start are equal; a slot is in the past when its start is earlier than the injected clock's now, start == now is accepted (ADR-0016); an empty customer name is rejected (ADR-0018); a past slot with no stored key is still rejected as past (ADR-0020, AC-057). Out: partial overlaps, which cannot occur with fixed 30-minute slots (ASM-0003); the replay of a stored key after the slot has started, which FR-006 owns (ADR-0020); oversized names and the error-code names (API specification)."
       actors: "Customer, through the studio frontend: bookings of the same start time on different resources no longer interfere; a slot that has just started can no longer be booked; a booking needs a non-empty name."
-      error_alt_paths: "Booking an already occupied slot of the same resource stays a conflict (AC-018); a slot starting before now and an empty customer name are 4xx JSON errors with a stable code that persist nothing (AC-016, AC-050, AC-052)."
+      error_alt_paths: "Booking an already occupied slot of the same resource stays a conflict (AC-018); a slot starting before now and an empty customer name are 4xx JSON errors with a stable code that persist nothing (AC-016, AC-050, AC-052); a past slot with an unknown key is rejected the same way (AC-057)."
       data: "No data change: the active-slot uniqueness key of ADR-0008 is (resource id, slot start); instants are epoch seconds compared with one comparison (ADR-0013)."
       edge_cases: "Same start time on two different resources is not an overlap (AC-037); the clock boundary is start == now accepted (AC-051) and start one second before now rejected (AC-050)."
       nfr: "No NFR moves (decision: unchanged); NFR-001 keeps its 50-request criterion."
@@ -255,7 +264,11 @@ functional:
       constraint, the outcome is decided by reading the booking stored under the key: same payload
       returns the original, different payload is the key conflict, no stored booking means the slot was
       taken. Keys and customer names are compared byte for byte as received. A booking request with
-      an empty idempotency key is rejected with a stable error code and creates nothing.
+      an empty idempotency key is rejected with a stable error code and creates nothing. These rules hold
+      also when the slot has already started: a repeat of a stored key is resolved from the stored
+      booking before the slot is rejected as a past slot (an identical payload returns the original, a
+      different payload is the key conflict), and only a key with no stored booking is rejected as a
+      past slot (FR-005).
     source: [US-006]
     acceptance:
       - id: AC-021
@@ -355,11 +368,32 @@ functional:
         then: the response is a 4xx JSON error with a stable code field and nothing is persisted
         kind: negative
         test: TestBookSlot_RejectsEmptyIdempotencyKey
+      - id: AC-055
+        given: a resource open Mon-Fri 09:00-17:00 UTC, a booking B1 for Monday 09:00 by "Ann" created with key K1 while the injected clock read Monday 08:00 UTC, and the clock now reading Monday 09:00:01 UTC
+        when: the identical request is repeated with key K1 after the slot has started
+        then: the response is B1 with its original id and not a past-slot error
+        kind: idempotency
+        test: TestBookSlot_RepeatAfterSlotStartedReturnsOriginalBooking
+        invariant: INV-003
+      - id: AC-058
+        given: a booking B1 for Monday 09:00 by "Ann" created with key K1 while the injected clock read Monday 08:00 UTC, and the clock now reading Monday 09:00:01 UTC
+        when: the identical request is repeated with key K1 after the slot has started
+        then: the total number of bookings stays 1
+        kind: idempotency
+        test: TestBookSlot_RepeatAfterSlotStartedCreatesNothingNew
+        invariant: INV-003
+      - id: AC-056
+        given: a booking B1 for Monday 09:00 by "Ann" created with key K1 while the injected clock read Monday 08:00 UTC, and the clock now reading Monday 09:00:01 UTC
+        when: a request repeats key K1 for the same past slot with customer name "Bob"
+        then: the response is a key-conflict JSON error with the code of ADR-0001, not the past-slot code
+        kind: negative
+        test: TestBookSlot_PastSlotRepeatWithDifferentPayloadIsKeyConflict
+        invariant: INV-003
     engineering_constraints:
       - id: EC-002
-        statement: A booking request repeated with the same idempotency key and an identical payload (same resource id, slot start and customer name), in any number and at any time, never creates a second booking and returns the original
+        statement: A booking request repeated with the same idempotency key and an identical payload (same resource id, slot start and customer name), in any number and at any time (also after the slot has started), never creates a second booking and returns the original
         kind: idempotency
-        instances: [AC-021, AC-022]
+        instances: [AC-021, AC-022, AC-055, AC-058]
         invariant: INV-003
         test: PropertyTest_Booking_IdempotentUnderRetry
       - id: EC-003
@@ -369,15 +403,15 @@ functional:
         invariant: INV-003
         test: PropertyTest_Booking_ConcurrentSameKeyYieldsOneBooking
       - id: EC-004
-        statement: A request that repeats an existing idempotency key with any differing resource id, slot start or customer name never creates a booking and never changes the stored one
+        statement: A request that repeats an existing idempotency key with any differing resource id, slot start or customer name (also for a slot that has already started) never creates a booking and never changes the stored one
         kind: idempotency
-        instances: [AC-038, AC-039, AC-040]
+        instances: [AC-038, AC-039, AC-040, AC-056]
         invariant: INV-003
         test: PropertyTest_Booking_KeyReuseWithDifferentPayloadCreatesNothing
     clarification:
-      scope: "In: repeats of a key with a different payload (ADR-0001), repeats after cancellation (ADR-0002), the read-after-violation classification (ADR-0011), exact string comparison (ADR-0015); the identical-payload repeat is the only repeat that returns the original; an empty key is rejected (ADR-0018). Out: the order against the not-in-the-past check (DEC-012), oversized keys (API specification), further concurrency scenarios (DEC-017)."
+      scope: "In: repeats of a key with a different payload (ADR-0001), repeats after cancellation (ADR-0002), the read-after-violation classification (ADR-0011), exact string comparison (ADR-0015); the identical-payload repeat is the only repeat that returns the original; an empty key is rejected (ADR-0018). the replay of a stored key after the slot has started (ADR-0020: the key is looked up when validation rejects a past slot). Out: a past slot with no stored key, which FR-005 owns (AC-057), oversized keys (API specification), further concurrency scenarios (DEC-017)."
       actors: "Customer, through the studio frontend: a retry must resend the same key, resource, slot and name, and a new booking intent after a cancel needs a new key."
-      error_alt_paths: "Different name, slot or resource under an existing key is a key-conflict error with a stable code and creates nothing (AC-038, AC-039, AC-040); a taken slot under a new key is a slot-taken conflict (AC-047); a repeat after cancel returns the cancelled original (AC-041, AC-042); an empty key is a 4xx JSON error with a stable code and creates nothing (AC-053)."
+      error_alt_paths: "Different name, slot or resource under an existing key is a key-conflict error with a stable code and creates nothing (AC-038, AC-039, AC-040); a taken slot under a new key is a slot-taken conflict (AC-047); a repeat after cancel returns the cancelled original (AC-041, AC-042); an empty key is a 4xx JSON error with a stable code and creates nothing (AC-053); after the slot has started, an identical repeat returns the original (AC-055, AC-058) and a different payload is the key conflict (AC-056)."
       data: "No new fields; keys of cancelled bookings are kept forever (ADR-0002) and the key stays unique across all bookings, active or cancelled (ADR-0008)."
       edge_cases: "Keys differing only by case or trailing space are different keys (AC-043, AC-044); names differing only by case or trailing space are a payload mismatch (AC-045, AC-046)."
       nfr: "No NFR moves (decision: unchanged); the extra read after a violation touches no stated threshold."
