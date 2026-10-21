@@ -1,0 +1,33 @@
+# Per-wave checkpoints carried from meta/architecture/handoff.md increments (decompose step 8c).
+# The topological waves of gantt.md do not map 1:1 onto increments, so each increment's
+# checkpoint is attached to the wave in which the increment's LAST card lands:
+#   Increment 1 -> CARD-001, CARD-002 (wave 1), CARD-003 (wave 2)          -> checkpoint at wave 2
+#   Increment 2 -> CARD-004 (wave 3), CARD-005 (wave 4)                    -> checkpoint at wave 4
+#   Increment 3 -> CARD-006 (wave 3), CARD-007, CARD-008 (wave 5)          -> checkpoint at wave 5
+#   Increment 4 -> CARD-009 (wave 6)                                       -> checkpoint at wave 6
+# Waves 1 and 3 carry no checkpoint entry and are not barriers.
+waves:
+  - wave: 2
+    increment: 1
+    checkpoint: "on a fresh database, `go test -run TestBookSlot_50ConcurrentRequestsExactlyOneWins ./...` shows exactly one success and 49 conflict responses, with no lock errors; the run starts the real binary against a fresh SQLite file."
+    collapses: [ADR-0006, ADR-0008, ADR-0012, ASM-0006, ADR-0013, NFR-001]
+    rollback: "nothing is deployed yet; revert the wave merges. No schema exists outside a fresh database, so no point of no return is crossed."
+    status: pending
+  - wave: 4
+    increment: 2
+    checkpoint: "against a fresh database, the replay scenarios pass: same key returns the original booking, a mismatching payload is rejected, the key after cancellation returns the cancelled original, a second cancel succeeds and a cancelled booking never becomes active again."
+    collapses: [DEC-012, ASM-0001, ADR-0010, ADR-0011, ADR-0001, ADR-0002, ADR-0003]
+    rollback: "revert the increment's merges; the migration that adds the cancelled-to-active trigger (ADR-0010) is reverted with them."
+    status: pending
+  - wave: 5
+    increment: 3
+    checkpoint: "for a resource with weekly working hours and one active booking, the availability for a seven-day range lists exactly the free half-hour slots, and a cancelled booking's slot reappears in the next query."
+    collapses: [DEC-016, ASM-0002, ASM-0007, ADR-0004]
+    rollback: "revert the increment's merges; it only adds read paths and validation over existing storage."
+    status: pending
+  - wave: 6
+    increment: 4
+    checkpoint: "`go test -run TestRelease ./...` passes: the full API works end to end against a fresh database, exactly one of 50 concurrent bookings wins, and every rule has at least one named test."
+    collapses: [ASM-0005, DEC-031, NFR-002, NFR-003]
+    rollback: "nothing new is shipped by this increment beyond the checks and a sample supervisor unit and environment file; revert the merges. First release is the point of no return and is crossed only after this checkpoint passes."
+    status: pending
