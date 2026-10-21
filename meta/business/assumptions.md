@@ -26,3 +26,12 @@ A free slot is defined without the not-in-the-past condition, so the studio's fr
 - check: "slots stay fixed 30-minute half-hour-aligned (FR-003); revisit by 2026-11-30 and whenever slot length or alignment becomes configurable"
 
 Because slots are fixed at 30 minutes and aligned to the half hour, two bookings overlap only when they are for the same slot.
+
+## ASM-0004 · The StudioGateway edge is adequately recorded as one open-host-service relation
+- status: unvalidated
+- owner: roman.miakotin
+- source: architect critic, context-mapping, 2026-10-21
+- date: 2026-10-21
+- check: "by 2026-11-30, when the API is specified, confirm that Customer (TERM-010) means the same thing on the service side and the gateway side, or record the difference as a language seam"
+
+The StudioGateway is the sole caller and the open-host-service relation captures the integration; the Customer term does not change meaning across that edge.

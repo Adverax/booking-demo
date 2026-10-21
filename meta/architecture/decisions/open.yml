@@ -252,3 +252,39 @@ open:
     criteria_refs: [NFR-001]
     status: open
     blocks: [none]
+  - id: DEC-019
+    question: >-
+      The header rationale of contexts.yml justifies the single context partly with 'one team', 'one owner' and the one-binary, one-SQLite-store constraints, which are not grounded in the brief or are deployment-shaped rather than domain-language evidence: keep the rationale as written, or rewrite it to rest on the ubiquitous language and the same-transaction invariants INV-001/INV-002 only? Raised by the critic as contested.
+    surfaced_from:
+      kind: ambiguity
+      ref: [CTX-001, CON-003, CON-005]
+    alternatives:
+      - label: keep_rationale
+        summary: "Keep the header as written; the conclusion stands and the extra points are corollaries."
+        pros: []
+        cons: []
+      - label: rewrite_on_language_and_invariants
+        summary: "Rewrite the header to rest only on the ubiquitous language and the same-transaction invariants."
+        pros: []
+        cons: []
+    criteria_refs: [CON-003, CON-005]
+    status: open
+    blocks: [none]
+  - id: DEC-020
+    question: >-
+      The context_map records the StudioGateway relation as CTX-001 to EXT-001 because the validator accepts an external system only as the target, although the real direction is inbound and only the prose says so: add an explicit note beside the relation, or leave it as is? Raised by the critic as contested.
+    surfaced_from:
+      kind: ambiguity
+      ref: [CTX-001, EXT-001]
+    alternatives:
+      - label: annotate_direction_workaround
+        summary: "Add a one-line note next to the relation stating that from/to order is a validator constraint and the traffic is inbound."
+        pros: []
+        cons: []
+      - label: leave_as_is
+        summary: "Leave the relation unchanged; external_systems.yml already carries the authoritative inbound direction."
+        pros: []
+        cons: []
+    criteria_refs: [CON-004, CON-006]
+    status: open
+    blocks: [none]

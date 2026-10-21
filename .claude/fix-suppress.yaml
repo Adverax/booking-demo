@@ -8,3 +8,8 @@
   file: "meta/architecture/glossary.yml"
   reason: "refuted: context unknown is the expected output of domain-extraction, contexts are assigned by context-mapping"
   dismissed: "2026-10-21"
+- rule: "boundary"
+  pattern: "missing Resource-catalog vs Booking context boundary"
+  file: "meta/architecture/domain/contexts.yml"
+  reason: "refuted: no glossary term changes meaning, INV-002 is a same-transaction rule across Resource and Booking, and the catalog is immutable after creation; actor and lifecycle differences are not language differences"
+  dismissed: "2026-10-21"
