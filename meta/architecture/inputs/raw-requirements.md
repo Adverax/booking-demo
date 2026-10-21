@@ -1,0 +1,21 @@
+# Raw requirements
+
+- Slots are 30 minutes long and aligned to the half hour (FR). Source: brief, 2026-10-21.
+- A slot is free when it falls inside working hours and does not overlap an active booking (FR). Source: brief, 2026-10-21.
+- Availability is queried for a resource and a date range of at most 14 days (FR). Source: brief, 2026-10-21.
+- A booking is accepted only for a slot inside working hours and not in the past (FR). Source: brief, 2026-10-21.
+- Two active bookings of the same resource never overlap, also under concurrent requests (FR, invariant). Source: brief, 2026-10-21.
+- Repeating a booking request with the same idempotency key returns the original booking and creates nothing new (FR, invariant). Source: brief, 2026-10-21.
+- The idempotency key is globally unique across the service, not scoped per resource (FR). Source: user, 2026-10-21.
+- A cancelled booking cannot be reactivated; a new booking is needed (FR, invariant). Source: brief, 2026-10-21.
+- A cancelled booking frees its slot immediately (FR). Source: brief, 2026-10-21.
+- Anyone who knows a booking id may cancel it; the service does not verify identity (FR). Source: user, 2026-10-21.
+- All times are stored and returned in UTC, in RFC 3339 format (CON). Source: brief, 2026-10-21.
+- Go 1.26, standard library `net/http` for the HTTP layer (CON). Source: brief, 2026-10-21.
+- SQLite is the only storage, through a pure-Go driver, no cgo (CON). Source: brief, 2026-10-21.
+- JSON over HTTP; errors are a JSON object with a stable `code` field (CON). Source: brief, 2026-10-21.
+- One binary, configured through environment variables (CON). Source: brief, 2026-10-21.
+- No authentication: the service runs behind the studio's own gateway (CON). Source: brief, 2026-10-21.
+- The full API works end to end against a fresh database (NFR, release criterion). Source: brief, 2026-10-21.
+- A concurrency test sends 50 simultaneous booking requests for the same slot and exactly one succeeds (NFR, release criterion). Source: brief, 2026-10-21.
+- Every rule above is covered by at least one named test (NFR, release criterion). Source: brief, 2026-10-21.

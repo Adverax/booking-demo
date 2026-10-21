@@ -1,0 +1,14 @@
+# forge gate runs - GENERATED, do not edit and do not commit (.gitignore).
+#
+# One entry per pre-commit CI gate run, whatever its outcome (pass | block |
+# timeout | failure), with the seconds it held the commit (ADR-0111/R2). The
+# gate's budget is derived from the last 20 entries (ADR-0111/R1,
+# ADR-0116/R1); /forge:status reads the same window for "gate too slow".
+#
+# `at` is UTC, ISO-8601. Capped at the most recent 100 runs - safe to
+# delete wholesale (the budget falls back to 60s until it refills).
+runs:
+  - gate: pre-commit-ci
+    outcome: pass
+    at: '2026-10-21T14:53:58Z'
+    elapsed: 0.130
