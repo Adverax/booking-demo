@@ -1,0 +1,46 @@
+version: 1
+stage: early-mvp
+language: en
+
+forge:
+  min_version: "2026.10.10"
+  skew_gate: block
+
+paths:
+  architecture: meta/architecture/
+  kanban: meta/kanban/
+  backlog: meta/kanban/backlog.md
+  backlog_scored: meta/kanban/backlog-scored.yml
+  roadmap: meta/kanban/roadmap.md
+  review_reports: meta/review/
+  fix_suppress: .claude/fix-suppress.yaml
+  retro: meta/kanban/retro.md
+
+methodology:
+  default: wsjf
+  per_category:
+    feature: rice
+    enabler: wsjf
+    tech-debt: wsjf
+    compliance: wsjf
+    ops: fifo
+
+extra_categories: []
+
+ci:
+  enabled: true
+  gates:
+    validator_errors: error
+    blocking_decisions: error
+    stale_artifacts: warn
+    reverse_pending: warn
+    audit_staleness: warn
+
+stakeholder_checkpoint:
+  skip: false
+
+models:
+  profile: balanced
+
+git_tracking:
+  preset: solo

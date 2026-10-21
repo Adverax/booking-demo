@@ -6,6 +6,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A fresh Go project (module `github.com/adverax/booking-demo`, Go 1.26) used for a live demonstration of forge. The only input is the design brief in `docs/booking-service.md`; it is frozen, so do not widen its scope. There is no code yet. Update this file once real structure exists.
 
+## Fixed decisions from the brief
+
+Summary of `docs/booking-service.md`; read the brief for the full text.
+
+- Stack: standard library `net/http`, SQLite via a pure-Go driver (no cgo), JSON over HTTP, one binary configured by environment variables, no authentication.
+- Errors are a JSON object with a stable `code` field. All times are UTC in RFC 3339.
+- Slots are 30 minutes, aligned to the half hour. Availability queries cover at most 14 days.
+- Invariants that must hold, each needing a named test: no overlapping active bookings of a resource (also under concurrency), bookings only inside working hours and not in the past, idempotent booking by idempotency key, cancellation is final.
+- First-release bar: a test fires 50 simultaneous bookings for one slot and exactly one succeeds.
+- Out of scope, including the "Later" waitlist: auth, payments, notifications, recurring or multi-slot bookings, other time zones, holidays or per-date exceptions, any UI.
+
 ## Commands
 
 - Build: `go build ./...`
@@ -15,7 +26,7 @@ A fresh Go project (module `github.com/adverax/booking-demo`, Go 1.26) used for 
 
 ## Language
 
-Talk to the user in English: the session is shown to an audience. Project artifacts (code, comments, `meta/` files, docs) are written in English.
+Talk to the user in Russian. Project artifacts (code, comments, `meta/` files, docs) are written in English.
 
 ## Attribution
 

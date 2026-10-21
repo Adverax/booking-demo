@@ -1,0 +1,181 @@
+# meta/kanban/config.yml
+implementation_skill: golang-pro   # fallback when auto-detection signals are ambiguous
+
+tdd: false            # true → the implementation agent must write the test first (RED→GREEN);
+                      # a card can override via the `TDD: true|false` field
+
+review:
+  enabled: true
+  min_score: 8          # target overall score (inclusive); the scale is defined by the forge:review skill
+  max_cycles: 3         # hard limit on forge:review → forge:fix iterations
+  min_improvement: 0.5  # minimum score gain per cycle; below this — escalate.
+                        # `"off"` (quoted — bare off is YAML boolean False, which
+                        # reads back as 0 and silently means "escalate only on a
+                        # strict fall") disables the check entirely, leaving
+                        # family_regression as the sole stall detector.
+                        # When to disable, from measured evidence: the score is a
+                        # judgement of the current state at the current DEPTH of
+                        # scrutiny, not a monotone measure of code health — a
+                        # deeper cycle finds more in the SAME code, so the score
+                        # falls while the card converges. On one board 8 of 20
+                        # cycle transitions fell below 0.5 and five of six cards
+                        # would have escalated; all five closed at 8.5–9.5. Zero
+                        # true positives, five false. Check your own board before
+                        # copying either setting.
+  build_fix_attempts: 2 # max attempts to fix build/tests before escalation (not counted as a review cycle)
+  scope_gate: on        # growth detection per review cycle (cmd-review-cycle-setup SCOPE GATE):
+                        #   on   → a card whose diff grows ≥2 components beyond its slice, or
+                        #          covers a ready sibling's Touches, escalates to the decompose
+                        #          station instead of being polished for 15 more rounds
+                        #   warn → detect + note + tell the reviewer, never escalate
+                        #   off  → disable (pre-existing behavior: growth is invisible)
+  family_regression: on # the loop-feeding-on-itself detector (cmd-review-cycle-fix
+                        # FAMILY REGRESSION CHECK). Two consecutive cycles whose new
+                        # gating findings are attributed to the previous fix AND fall in
+                        # one file/function family → the loop is regenerating defects,
+                        # not converging; escalate with the family and let a human pick
+                        # the source (design / undefined term / bad slice).
+                        #   on   → escalate (default)
+                        #   warn → write the [Family] note, never escalate
+                        #   off  → never a skip (CARD-154): the check runs on every cycle
+                        #          > 1 — refused in run auto/autonomy, an informational
+                        #          note in interactive mode once it fires. The stalled
+                        #          check below is blind to this shape.
+  family_fix: "off"     # what the FIRST family-regression hit of a card buys,
+                        # before the threshold above ever escalates (CARD-127,
+                        # EXP-0002 branch 1; review.family_fix in
+                        # cmd-review-cycle-setup and cmd-review-cycle-fix).
+                        #   off           → nothing; the procedure is exactly what
+                        #                   it was before this key existed (default)
+                        #   class_closure → that ONE fix round, ONCE PER CARD (not
+                        #                   once per family-regression streak — a
+                        #                   card-scoped guard, not the streak
+                        #                   counter, keeps a later, different
+                        #                   family from buying a second one), is
+                        #                   spawned `heavy` instead of `standard`
+                        #                   and carries the class-closure brief:
+                        #                   the cycle history of the attempt, the
+                        #                   [Family] sentence, and a mandate to
+                        #                   derive the full POPULATION of the
+                        #                   class and a checklist before any code.
+                        #                   It costs one stronger agent, once per
+                        #                   card, and writes exactly one `[Fix N]
+                        #                   class=heavy family=<family>` note PER
+                        #                   CARD; the escalation threshold does
+                        #                   not move.
+                        # QUOTE THE WORD if your YAML writer is loose about it: a
+                        # bare `off` is the boolean False, and this project already
+                        # lost `min_improvement` that way. An unrecognised value is
+                        # refused loudly with the key and the value — never read as
+                        # `off`.
+  test_command: ""      # override the build/test command; empty = auto-detect by Skill. Siblings (NFR-026): coverage_min: 0 (percent; 0 = off), coverage_command: "" (below)
+  test_scope: impact    # scope of the PER-CYCLE test gate: impact | full.
+                        #   impact → each review-cycle gate builds everything but tests only
+                        #        the packages the card changed plus their reverse dependencies
+                        #        (per-stack recipes: cmd-review-cycle-setup "IMPACT SET"). The FULL
+                        #        suite still runs once per card — on the merge gate
+                        #        (/merge --test-cmd) — and once per wave (smoke test), so the
+                        #        definition of done is unchanged; only the inner loop narrows.
+                        #   full → every cycle gate runs the full suite (pre-existing behavior).
+                        #   Underivable impact (dependency manifest/lockfile/build config
+                        #        changed, unknown stack) → that gate falls back to full.
+                        #   python-pro: a testmon-backed cycle-gate recipe exists in CODE
+                        #        (CARD-122/ADR-0102/COMP-106, cmd-review-cycle-setup "HOW
+                        #        cycle_test_cmd IS BUILT") but is NOT a provisioned
+                        #        dependency of this project — no CI/harness step installs
+                        #        `pytest-testmon`, so it fails closed to full on every
+                        #        environment following the project's own setup. CARD-112
+                        #        (FR-071/CON-018/ADR-0057) measured it against every card's
+                        #        own `[Build gate]` history and confirmed it has never
+                        #        actually narrowed a real run (`tests/test_python_impact_
+                        #        recipe.py`) — declare `full` for this stack until
+                        #        `pytest-testmon` provisioning lands, not `impact`.
+  parallel: false       # true → split review across dimensions run concurrently, then
+                        #        merge (shorter wall-clock on big diffs, more agents)
+  mutation_check: false # true → forge:review's Step 8f also runs a capped, targeted mutation
+                        #        check (edits + reverts files, runs test_command) — opt-in because
+                        #        it needs Edit/Bash and adds a test-run per mutant; off by default
+  visual: auto          # visual loop for UI cards (see cmd-review-cycle-setup "VISUAL CAPTURE"):
+                        #        auto → for UI cards, run the app (harness), screenshot the card's
+                        #        screens + record the browser runtime log (console errors, uncaught
+                        #        exceptions, failed requests), and let forge:review's Step 8g judge
+                        #        pixels and log against meta/design/brief.md. App fails to BOOT →
+                        #        blocks like a build failure (fix → debug → escalate); mere tooling
+                        #        gaps (no run target / no screenshot tool) degrade to static-only
+                        #        review. off → skip capture entirely.
+  visual_diff_threshold: 0.01   # baseline-diff flag level: share of changed pixels vs the
+                        #        accepted baselines in meta/design/baselines/ above which a
+                        #        screen is flagged to the reviewer as a possible visual
+                        #        regression (the reviewer judges intended-vs-regression;
+                        #        the ratio only detects)
+
+e2e:
+  enabled: auto         # e2e gating (engineering-standards §6): auto = on when the project
+                        # has a web frontend (detected like forge:harness §5b); false = off.
+                        # Backend-only projects need no override — auto resolves to off.
+  test_command: ""      # full-suite command for the WAVE gate; empty = `make test-e2e`
+                        # if the harness target exists, else the wave gate reports the
+                        # gap instead of silently skipping.
+
+dispatcher:
+  max_concurrent: 5     # maximum number of cards running simultaneously
+  max_overlap: 0.3      # predicted-overlap threshold (0..1) above which two same-wave
+                        # cards are serialized instead of run in parallel (see cmd-run.md
+                        # "conflict graph"); 0 = serialize on any overlap, 1 = never serialize
+
+autonomy:                # CARD-080/FR-077/ADR-0059. All keys below default OFF/absent —
+                        # `run`/`run auto` never read this block (G-1/G-3). `run autonomy`
+                        # is the mode; these keys tune declared defaults WITHIN it, they do
+                        # not turn it on (the mode is selected by the `run autonomy` argument
+                        # itself, not by a config flag).
+  smoke_failure: fix_then_revert  # FR-080/INV-076 (CARD-086): one of fix_then_revert |
+                        # revert | park — see cmd-run-autonomy.md's WAVE-SMOKE-FAILURE POLICY.
+                        #   fix_then_revert (default) — one forge:debug + quick-card
+                        #     attempt (Complexity: trivial, ADR-0070/R1) on the failing
+                        #     wave; smoke green after it → outcome fixed, run continues;
+                        #     still red → outcome reverted (existing wave-revert procedure).
+                        #   revert — the same reverted outcome immediately, no fix attempt.
+                        #   park — outcome parked, no fix, no revert; every unmerged card
+                        #     of the wave is parked (EVT-037 CardParked) and reaches the
+                        #     escalation queue by that path alone. Legal only for a
+                        #     migrations-in-merged-order or e2e-suite failure (ADR-0061/R1)
+                        #     — any full_test_cmd failure degrades to revert regardless of
+                        #     this key.
+                        # In every case: `fixed`/`reverted` never reach the escalation
+                        # queue (INV-076) and `park` is never one of run autonomy's three
+                        # legitimate stops (INV-073) — the run continues with waves that
+                        # do not depend on the affected one. A config predating this key
+                        # (no `autonomy.smoke_failure` at all) is treated as `park`.
+  breaker:                # FR-082/INV-077 (CARD-088): the run's third legitimate
+                        # stop (INV-073 stop-case c) — see cmd-run-autonomy.md's RUN BREAKER
+                        # block. Distinguishes a systemic model/handoff defect from
+                        # an ordinary card failure: a third card is not burned on
+                        # the same defect that already failed the first two.
+    escalation_share: 0.5 # trips when a wave of >=2 cards escalates at or above
+                        # this share of its DECLARED size (ADR-0060 denominator);
+                        # below the threshold, or in a 1-card wave (G-1, FR-082
+                        # verbatim), this condition never applies.
+    consecutive_redo_failures: 2  # trips the SAME stop independently of wave size
+                        # (ADR-0069's "second trigger") once this many auto-redos
+                        # IN A ROW each ended in a second escalation of the same
+                        # card — counted from the run report's own event stream,
+                        # never from dispatcher.state (EC(ADR-0066/R1)).
+
+conflict:
+  hotspots: []          # repo-relative paths/globs where concurrent edits almost always
+                        # conflict (route registration, DI wiring, go.mod, migrations index,
+                        # openapi spec, ...). Any two cards predicted to touch the same
+                        # hotspot are serialized regardless of their overall overlap score.
+                        # Seeded manually; forge:retrospective proposes additions from
+                        # meta/kanban/conflict-history.yml (files that conflicted ≥ 2 times).
+
+done:
+  require_pr: false     # true → /kanban done always opens a PR, direct merge is forbidden
+  target_branch: ""     # branch for merge/rebase; empty = auto-detect (main/master/develop)
+
+sizing:
+  min_estimate: 0.25d   # cards smaller than this → propose merging with neighbors
+  max_estimate: 1d      # cards larger than this → a PROMPT for a human decision, never an automatic split (ADR-0056; decompose step 6a asks, the declared failure criterion or a human answers)
+  # AI-development rationale: context window is the binding constraint, not hours.
+  # 1d = one focused, reviewable change (one adapter, one service method + tests).
+  # 3d cards were calibrated for manual dev; at that size AI review loses precision.

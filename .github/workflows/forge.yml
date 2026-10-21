@@ -1,0 +1,103 @@
+# forge CI gate — copy into your project's .github/workflows/forge.yml
+#
+# Runs forge's DETERMINISTIC disciplines as an automatic gate: architecture
+# validators (incl. trace↔code drift), synthesis-blocking decisions, stale
+# artifacts. Fails the build on a hard-gate violation. LLM disciplines (review,
+# reverse, AC verification) are NOT here — CI runs no agent.
+#
+# Setup (Settings → Secrets and variables → Actions):
+#   1. Copy this file to .github/workflows/forge.yml in your project.
+#   2. Secret FORGE_TOKEN — forge is private, so the gate is checked out with a
+#      fine-grained, READ-ONLY PAT (Repository access: Adverax/forge only;
+#      Repository permissions: Contents → Read-only). Nothing else is needed.
+#   3. Variable FORGE_REF — the forge version the gate runs from: a release tag
+#      or a commit SHA. Declared explicitly on purpose: with an implicit default
+#      the gate's own logic changes under your project between runs. Set it to
+#      `main` yourself if you accept that trade-off.
+#   4. Set the --meta path below to where your forge model lives
+#      (default `meta`; e.g. `services/cloud/meta` for a nested service).
+#   5. Tune gate levels in meta/.skills.yml → ci.gates (error | warn | off).
+#
+# Until it is configured, this workflow FAILS LOUDLY (ADR-0021): a green forge
+# check must mean "checked", never "not configured". The single exception is a
+# run where GitHub itself withholds repository secrets — a pull request from a
+# fork, or a fork's own branches — which is reported as an explicit skip,
+# because there the missing secret is a platform limit, not a setup mistake.
+
+name: forge
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+
+jobs:
+  forge-gate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      FORGE_TOKEN_SET: ${{ secrets.FORGE_TOKEN != '' }}
+      FORGE_REF: ${{ vars.FORGE_REF }}
+      # Runs where the upstream repository's secrets are not available to this
+      # run BY GitHub design: a PR whose head is in another repo (cross-repo
+      # PR), or a fork's own branches (a fork does not inherit the upstream's
+      # secrets — it configures its own). Skip there — fail everywhere else.
+      CROSS_REPO_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+      OWN_FORK_BRANCH: ${{ github.event.repository.fork == true }}
+      SECRETS_UNAVAILABLE: ${{ github.event.repository.fork == true || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) }}
+    steps:
+      - name: Preflight — the gate must be armed, or say why it is not
+        id: preflight
+        run: |
+          FORGE_REF="$(printf '%s' "$FORGE_REF" | tr -d '[:space:]')"
+          if [ "$FORGE_TOKEN_SET" = 'true' ] && [ -n "$FORGE_REF" ]; then
+            echo "armed=true" >> "$GITHUB_OUTPUT"
+            echo "FORGE_REF=$FORGE_REF" >> "$GITHUB_ENV"
+            echo "forge gate armed — running against forge @ $FORGE_REF."
+            exit 0
+          fi
+          if [ "$SECRETS_UNAVAILABLE" = 'true' ]; then
+            if [ "$CROSS_REPO_PR" = 'true' ]; then
+              echo "::notice::forge gate SKIPPED — this PR's head is in another repository, so the upstream repository's secrets are not available to this run. This is a platform limit, not a problem with this change: the gate runs for real on the project's own branches."
+            else
+              echo "::notice::forge gate SKIPPED — this repository is a fork; a fork does not inherit the upstream's secrets, it configures its own. Add your own FORGE_TOKEN secret and FORGE_REF variable (Settings → Secrets and variables → Actions) to run the gate here."
+            fi
+            exit 0
+          fi
+          echo "::error::forge gate is NOT CONFIGURED — this build checked nothing. Configure it (or delete this workflow); a green forge check must mean 'checked'."
+          if [ "$FORGE_TOKEN_SET" != 'true' ]; then
+            echo "::error::missing repository SECRET FORGE_TOKEN — a fine-grained read-only PAT with Contents: Read on Adverax/forge."
+          fi
+          if [ -z "$FORGE_REF" ]; then
+            echo "::error::missing repository VARIABLE FORGE_REF — the forge tag or commit SHA this gate runs from."
+          fi
+          echo "Setup instructions: see the Setup block in this file's header comment (.github/workflows/forge.yml)."
+          exit 1
+
+      - name: Checkout project
+        if: steps.preflight.outputs.armed == 'true'
+        uses: actions/checkout@v4
+
+      - name: Checkout forge (private plugin)
+        if: steps.preflight.outputs.armed == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: Adverax/forge
+          ref: ${{ env.FORGE_REF }}
+          token: ${{ secrets.FORGE_TOKEN }}
+          path: .forge
+
+      - uses: actions/setup-python@v5
+        if: steps.preflight.outputs.armed == 'true'
+        with:
+          python-version: '3.x'
+
+      - name: Install deps
+        if: steps.preflight.outputs.armed == 'true'
+        run: pip install ruamel.yaml
+
+      - name: forge CI gate
+        if: steps.preflight.outputs.armed == 'true'
+        run: python .forge/skills/architect-validate/scripts/ci.py --meta meta
+        # nested service example:
+        # run: python .forge/skills/architect-validate/scripts/ci.py --meta services/cloud/meta
