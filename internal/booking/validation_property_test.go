@@ -30,9 +30,19 @@ func TestProperty_Booking_PastCheckUsesInjectedClock(t *testing.T) {
 	resourceID := e.newResource(t)
 	ctx := context.Background()
 	pastSeen, acceptedSeen := 0, 0
+	// All draws share one resource, so a slot is drawn at most once: a repeated slot would be
+	// rejected as taken, a failure unrelated to the clock.
+	drawn := make(map[int64]bool)
 	for iter := range 400 {
 		// 1975 .. 2095, on the half hour; far from the real clock in most draws.
-		slot := time.Unix((157_766_400+rng.Int64N(3_786_912_000))/1800*1800, 0)
+		var slot time.Time
+		for {
+			slot = time.Unix((157_766_400+rng.Int64N(3_786_912_000))/1800*1800, 0)
+			if !drawn[slot.Unix()] {
+				break
+			}
+		}
+		drawn[slot.Unix()] = true
 		var offset time.Duration
 		switch rng.IntN(4) {
 		case 0:

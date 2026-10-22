@@ -175,17 +175,27 @@ paths:
         on the half hour, is answered with `400 validation_error` and nothing is stored. Keys and
         names are taken byte for byte as received: no trimming, no case folding (ADR-0015).
 
-        **Idempotency.** The key is unique across the whole service. A request whose key is
-        already stored is resolved from the stored booking, whatever its current status:
+        **Order of checks** (ADR-0011, ADR-0020). A request is validated before its key is
+        consulted: first its shape (`400 validation_error`, above), then its resource (unknown:
+        `404 not_found`), then the resource's working hours (slot outside them:
+        `422 slot_outside_working_hours`). These answers do not depend on the key: they are given
+        also when the key is already stored, whatever payload is stored under it. The stored key
+        is looked up only when the insert is rejected as not unique (ADR-0011) and when the slot
+        is in the past (ADR-0020, below); a request that passes these checks reads no key before
+        its insert.
+
+        **Idempotency.** The key is unique across the whole service. A request that passes the
+        checks above and whose key is already stored is resolved from the stored booking,
+        whatever its current status:
         - same payload (same `resourceId`, same `slotStart` instant, byte-equal `customerName`):
           `200` with the original booking in its current state, also when it was cancelled; nothing
           new is created (FR-006, ADR-0002);
         - any difference in that payload: `409 idempotency_key_conflict`; nothing is created or
           changed (ADR-0001).
 
-        **Slots.** A request whose key is not stored creates a booking (`201`) only when the slot
-        lies inside the resource's working hours (otherwise `422 slot_outside_working_hours`), is
-        not in the past, and has no active booking (otherwise `409 slot_taken`).
+        **Slots.** A request whose slot lies inside the resource's working hours and whose key is
+        not stored creates a booking (`201`) only when the slot is not in the past and has no
+        active booking (otherwise `409 slot_taken`).
 
         **Past slots** (ADR-0016, ADR-0020). A slot is in the past when its start is earlier than
         the current time; a slot whose start equals the current time is accepted. For a slot
@@ -223,7 +233,8 @@ paths:
             `slot_taken`: the slot has an active booking under another key (INV-001), and nothing
             is stored under this key.
             `idempotency_key_conflict`: the key is stored with a different resource, slot start or
-            customer name (ADR-0001), also for a slot that has already started (ADR-0020).
+            customer name (ADR-0001), also for a slot that has already started (ADR-0020); given
+            only to a request that passes the shape, resource and working-hours checks.
           content:
             application/json:
               schema:
@@ -232,7 +243,8 @@ paths:
           $ref: '#/components/responses/RequestTooLarge'
         '422':
           description: |
-            `slot_outside_working_hours`: the slot is not inside the resource's working hours.
+            `slot_outside_working_hours`: the slot is not inside the resource's working hours,
+            whether or not the key is stored.
             `slot_in_past`: the slot starts before the current time and no booking is stored under
             the key (ADR-0016, ADR-0020).
           content:
