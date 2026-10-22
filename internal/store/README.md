@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The SQLite store of the booking service (COMP-005) and the runner of its embedded schema migrations (COMP-006). `Open` connects, checks that WAL mode is active, and applies every pending migration before returning, so a fresh database needs no extra step. Read and write operations are `Store` methods that implement the ports declared by the consuming components (`booking.Repository`, `catalog.Repository`).
+The SQLite store of the booking service (COMP-005) and the runner of its embedded schema migrations (COMP-006). `Open` connects, checks that WAL mode is active, and applies every pending migration before returning, so a fresh database needs no extra step. Read and write operations are `Store` methods that implement the ports declared by the consuming components (`booking.Repository`, `catalog.Repository`, `availability.Bookings`).
 
 ## Architecture
 
@@ -14,6 +14,7 @@ The SQLite store of the booking service (COMP-005) and the runner of its embedde
 - The package defines no repository interfaces; consuming components own their ports and the store implements them ([`repository.go`](./repository.go)).
 - `InsertBooking` is one autocommit `INSERT` with no read before it (ADR-0012); a rejection by either unique index is returned as `booking.ErrNotUnique`, without saying which index fired. `InsertResource` writes the resource and its working hours in one write-only transaction. `ListResources` and `GetResource` are single `SELECT`s joining the resource and its working hours (resources in creation order, intervals by weekday); an unknown id is `catalog.ErrNotFound`.
 - `UpdateBookingStatus` is one autocommit `UPDATE ... RETURNING` (ADR-0012): an unknown id is `booking.ErrNotFound`; the abort of the `booking_cancelled_is_final` trigger (migration 0002, ADR-0010) is `booking.ErrBookingCancelled`. `GetBooking` is one autocommit `SELECT`. `GetBookingByIdempotencyKey` is one autocommit `SELECT` by the key, compared byte for byte (BINARY collation, ADR-0015): the classifying read of insert-then-classify, never in a transaction with a write (ADR-0011, ADR-0012); an unknown key is `booking.ErrNotFound`.
+- `ActiveBookingStarts` is one autocommit `SELECT` of the slot starts of one resource's active bookings in a half-open window `[from, to)`, ordered by start (ADR-0012); cancelled bookings are not returned, so their slots read as free. The partial unique index on the active slot (ADR-0008) answers it.
 
 ## Key entities
 
@@ -24,6 +25,7 @@ The SQLite store of the booking service (COMP-005) and the runner of its embedde
 | `InsertBooking` / `InsertResource` | method | Adapters of `booking.Repository` and `catalog.Repository` | [`repository.go`](./repository.go) |
 | `ListResources` / `GetResource` | method | Read side of `catalog.Repository` | [`repository.go`](./repository.go) |
 | `UpdateBookingStatus` / `GetBooking` | method | Status change (cancel) and read of one booking, adapters of `booking.Repository` | [`repository.go`](./repository.go) |
+| `ActiveBookingStarts` | method | Read of a resource's active booking starts in a window, adapter of `availability.Bookings` | [`repository.go`](./repository.go) |
 | `GetBookingByIdempotencyKey` | method | Read of the booking stored under a key, for classifying a rejected insert | [`repository.go`](./repository.go) |
 | `IsUniqueViolation` | func | Reports a unique-index rejection (active slot or idempotency key) | [`store.go`](./store.go) |
 | `ErrSchemaTooNew` | var | Database schema is newer than this binary | [`migrate.go`](./migrate.go) |

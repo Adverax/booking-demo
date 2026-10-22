@@ -22,6 +22,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/adverax/booking-demo/internal/availability"
 	"github.com/adverax/booking-demo/internal/booking"
 	"github.com/adverax/booking-demo/internal/catalog"
 	"github.com/adverax/booking-demo/internal/httpapi"
@@ -85,7 +86,7 @@ func run(ctx context.Context, getenv func(string) string) (err error) {
 	}
 	cat := catalog.New(st)
 	srv := &http.Server{
-		Handler:           httpapi.NewHandler(httpapi.NewServer(cat, booking.NewService(st, cat, time.Now))),
+		Handler:           httpapi.NewHandler(httpapi.NewServer(cat, availability.NewService(cat, st), booking.NewService(st, cat, time.Now))),
 		ReadHeaderTimeout: readHeaderTimeout,
 		ReadTimeout:       readTimeout,
 		WriteTimeout:      writeTimeout,

@@ -14,6 +14,7 @@ import (
 	"github.com/getkin/kin-openapi/openapi3filter"
 	"github.com/getkin/kin-openapi/routers"
 
+	"github.com/adverax/booking-demo/internal/availability"
 	"github.com/adverax/booking-demo/internal/booking"
 	"github.com/adverax/booking-demo/internal/catalog"
 	"github.com/adverax/booking-demo/internal/httpapi"
@@ -245,7 +246,7 @@ func TestBooking_CannotReactivate(t *testing.T) {
 	}
 
 	// Schema guard, through the HTTP plumbing.
-	h := httpapi.NewHandler(reactivatingServer{Server: httpapi.NewServer(catalog.New(e.store), svc), repo: e.store})
+	h := httpapi.NewHandler(reactivatingServer{Server: httpapi.NewServer(catalog.New(e.store), availability.NewService(catalog.New(e.store), e.store), svc), repo: e.store})
 	rec := serve(h, http.MethodPost, "/bookings/"+b1.Id+"/cancel", "")
 	assertError(t, rec, http.StatusConflict, httpapi.ErrorCodeBookingCancelled)
 	var body any
