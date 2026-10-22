@@ -14,6 +14,7 @@
 ## Convergence
 - ⚠ NOT converged for the wave's declared scope — CARD-004 (FR-007 cancellation, FR-008 cancellation is final) did not merge: escalated by the scope gate (see below). Everything that merged converged: FR-001 and FR-002 ✓.
 - UI gaps: none — backend-only HTTP API (UI surface: none), no frontend in scope.
+  ↳ FR-008 converged in wave 4 (2026-10-22): CARD-004 merged after unblock (851e24a); FR-007 cancellation holds, its availability half waits for CARD-008.
 
 ## Wave checkpoint
 - Wave 3 carries no checkpoint entry in meta/kanban/waves.yml (Increment 2 closes at wave 4, Increment 3 at wave 5).

@@ -18,7 +18,7 @@ waves:
     checkpoint: "against a fresh database, the replay scenarios pass: same key returns the original booking, a mismatching payload is rejected, the key after cancellation returns the cancelled original, a second cancel succeeds and a cancelled booking never becomes active again."
     collapses: [DEC-012, ADR-0020, ASM-0001, ADR-0010, ADR-0011, ADR-0001, ADR-0002, ADR-0003]
     rollback: "revert the increment's merges; the migration that adds the cancelled-to-active trigger (ADR-0010) is reverted with them."
-    status: pending
+    status: passed
   - wave: 5
     increment: 3
     checkpoint: "for a resource with weekly working hours and one active booking, the availability for a seven-day range lists exactly the free half-hour slots, and a cancelled booking's slot reappears in the next query."

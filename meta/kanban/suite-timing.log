@@ -2,3 +2,4 @@
 2026-10-22 wave-1 full-suite 2s PASS (re-run at run resume, after CARD-001/CARD-002 merged by hand-driven unblock/done)
 2026-10-22 wave-2 full-suite 4s PASS
 2026-10-22 wave-3 full-suite 3s PASS (CARD-006 merged; CARD-004 escalated, unmerged)
+2026-10-22 wave-4 full-suite 3s PASS (CARD-005 merged)

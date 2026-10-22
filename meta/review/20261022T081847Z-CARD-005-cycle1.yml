@@ -1,0 +1,122 @@
+version: 1
+generated_at: "2026-10-22T08:18:47Z"
+target: "card/005-idempotent-replay (main...HEAD, 8454b48..18b7e94)"
+card: CARD-005
+cycle: 1
+overall_score: 9.5
+risk_level: low
+review_lane: fast
+reviewer: forge:review
+reviewer_version: "2026.10.10"
+model: "opus"
+
+task_contract_verdict: pass
+system_contract_verdict: pass
+overall_verdict: pass
+
+security: "applicable (0 findings)"
+
+coverage:
+  read:
+    - internal/booking/booking.go
+    - internal/booking/booking_test.go
+    - internal/booking/replay_property_test.go
+    - internal/booking/property_test.go (diff)
+    - internal/booking/cancel_property_test.go (diff)
+    - internal/httpapi/bookings.go
+    - internal/httpapi/replay_test.go
+    - internal/httpapi/api_test.go (diff + helpers)
+    - internal/store/repository.go
+    - internal/store/replay_test.go
+    - internal/store/store.go (Open, busyTimeout, IsUniqueViolation)
+    - internal/store/migrations/0001_create_resource_and_booking.sql
+    - api/openapi.yaml (POST /bookings)
+    - internal/booking/README.md, internal/httpapi/README.md, internal/store/README.md (diff)
+    - cmd/booking/main.go (timeouts), cmd/booking/main_test.go (TestBookSlot_50ConcurrentRequestsExactlyOneWins)
+  not_reached:
+    - ADR texts beyond ADR-0020's context paragraph (relied on the injected contract's summaries)
+  confidence: high
+  executed:
+    - "go build ./... ok; go vet ./... ok; go test -count=1 ./... ok (all 5 packages)"
+    - "go test -count=1 -race ./internal/booking ./internal/httpapi ok"
+
+metrics:
+  diff: { files: 13, added: 867, removed: 43 }
+  max_fan_in: { symbol: "booking.Service.Book", callers: 1, note: "one production caller (internal/httpapi/bookings.go:18); signature change (3 returns) compiles repo-wide" }
+  new_symbols_fan_in:
+    "booking.Booking.SamePayload": 1
+    "booking.ErrKeyConflict": 1
+    "booking.ErrInvalidRequest": 1
+    "store.Store.GetBookingByIdempotencyKey": 1
+  tests_cover_change: true
+  hotspots: []
+  cochange_missing: []
+  impact_set_artifact: "meta/impact/impact-set-8454b48ab954-18b7e94ebe98-worktree.json"
+  unmeasured: {}
+
+system_contract:
+  rules_checked: 11
+  holds: 8
+  unchecked: 3
+  violated: 0
+  verdicts:
+    - "ADR-0010/R1 ✓ holds — replay path only reads (booking.go:179-190, no UpdateBookingStatus call); TestBooking_CannotReactivate green on 18b7e94 (go test ./internal/booking)"
+    - "ADR-0012/R1 ✓ holds — Book issues one ExecContext INSERT (store/repository.go:24) then, only on ErrNotUnique, one QueryRowContext SELECT (store/repository.go:162); no BeginTx on the booking path (grep BeginTx: only InsertResource); TestProperty_Booking_ConcurrentReplaysNeverSeeLockErrors green with -race"
+    - "ADR-0013/R1 ✓ holds — diff adds no time.Now in production code (grep internal/booking/*.go non-test); TestProperty_Booking_SlotStartStoredAsCanonicalEpochSeconds green; tests move the injected clock (movableClock, newAPIEnvWithClock)"
+    - "ADR-0015/R1 ✓ holds — SamePayload compares ResourceID ==, SlotStart.Equal (canonical), CustomerName == (booking.go:75-77); key read uses BINARY-collated '=' (repository.go:162, migration 0001:25-26); TestProperty_Booking_PayloadComparedByteForByte, TestStore_GetBookingByIdempotencyKey green"
+    - "CON-007 ✓ holds — same evidence as ADR-0012/R1: two separate autocommit statements, no read-then-write transaction"
+    - "CON-008 ✓ holds — instants reach SQL only via toEpoch/fromEpoch (scanBooking reused); RFC 3339 only in httpapi bookingToAPI; current time only via injected clock"
+    - "INV-001 ✓ holds — slot-index rejection with no booking under the key maps to ErrSlotTaken (booking.go:182-183); TestBookSlot_50ConcurrentRequestsExactlyOneWins (cmd/booking), TestBookSlot_RejectsAlreadyBookedSlot, TestBookSlot_SameStartOnAnotherResourceIsNotTheSameSlot, TestBookSlot_SlotTakenStoresNothingUnderNewKey, TestProperty_Booking_NoOverlapUnderConcurrency green"
+    - "INV-002 ⚠ unchecked — check_ref_missing: TestBookSlot_AcceptsSlotStartingExactlyNow, TestBookSlot_RejectsSlotInThePast, TestBookSlot_RejectsSlotOutsideWorkingHours, TestBookSlot_RejectsSlotStartingOneSecondBeforeNow, TestBookSlot_UnknownKeyForPastSlotIsRejectedAsPast (all owned by CARD-007); manual read: this diff adds no past/working-hours check and no lookup-first, so the late-replay clause is satisfied by insert-then-classify (AC-055/056/058 tests green)"
+    - "INV-003 ✓ holds — all 17 named tests exist and are green on 18b7e94 (internal/httpapi/replay_test.go, internal/booking/replay_property_test.go); classifier booking.go:179-190"
+    - "INV-004 ⚠ unchecked — check_ref_missing: TestBookSlot_RepeatAfterCancelCreatesNoNewBooking (moved to CARD-008); remaining refs TestBooking_CancelledStaysCancelled, TestBooking_CannotReactivate, TestBooking_NewBookingAfterCancelCreatesNewId, TestSchema_RejectsCancelledToActiveTransition green; manual read: replay of a cancelled key returns it unchanged (TestBookSlot_RepeatAfterCancelReturnsCancelledOriginal), no violation"
+    - "INV-005 ⚠ unchecked — no_eligible_fact: diff touches no resource/catalog code; named CreateResource tests remain green in the full suite"
+
+root_causes: []
+
+findings:
+  - id: F-001
+    severity: low
+    category: tech-debt
+    type: gap
+    file: internal/booking/booking_test.go
+    line: 56
+    title: "No test pins ADR-0020's 'no key read on the normal booking path'"
+    description: |
+      The card objective and ADR-0020 forbid a lookup of the idempotency key before/alongside a
+      successful insert (lookup_first rejected). booking.go:167-170 is correct today, but fakeRepo
+      counts only InsertBooking calls; GetBookingByIdempotencyKey calls are not counted, so a
+      regression that reads the key first (e.g. while CARD-007 adds the past-slot path) would
+      still pass every test in the suite.
+    suggestion: |
+      Count GetBookingByIdempotencyKey calls in fakeRepo and assert 0 reads in
+      TestService_BookStoresAnActiveBookingAtTheCanonicalStart (and exactly 1 in the classifier table).
+    confidence: high
+    source: static
+    violates: null
+    root_cause: null
+    status: open
+    fixed_in: null
+    dismissed_reason: null
+    learned_pattern: null
+
+out_of_scope:
+  - file: internal/booking/replay_property_test.go
+    line: 87
+    title: "Replay tests rely on misaligned slotStart being canonicalised, which CARD-007 will reject"
+    note: |
+      api/openapi.yaml:174-175 says a slotStart not on the half hour is 400 validation_error
+      (CARD-007 owns alignment). TestProperty_Booking_IdempotentUnderRetry ("another spelling of
+      the same slot" via withinHalfHour), PayloadComparedByteForByte, KeyReuseWithDifferentPayload
+      and the unit case "same payload, non-canonical spelling of the slot" (booking_test.go:151) send
+      misaligned starts through Service.Book. Pre-existing behaviour, not caused by this diff; flag
+      for CARD-007 so it decides the order of alignment rejection vs replay classification and
+      updates these generators.
+
+minor_triage:
+  sampled: 1
+  total: 1
+  items:
+    - finding: "No test pins ADR-0020's 'no key read on the normal booking path'"
+      should_gate: false
+      rationale: "Code is correct now; this is regression insurance for CARD-007's change, cheap to add, non-blocking."
