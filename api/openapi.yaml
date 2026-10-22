@@ -21,8 +21,11 @@ info:
     **Errors.** Every error response is a JSON object with a stable `code` field (CON-004). The
     codes are declared once, in the `ErrorCode` schema below; `message` is human-readable and not
     part of the contract. Besides the responses declared per operation, any request may get:
-    `404 not_found` for an unknown path, `405 method_not_allowed` for a known path with a method it
-    does not serve, and `500 internal_error` for an unexpected failure.
+    `404 not_found` for an unknown path or a path not in canonical form (an empty segment, `.` or
+    `..`; the service does not redirect), `405 method_not_allowed` for a known path with a method
+    it does not serve, and `500 internal_error` for an unexpected failure. A request body must be
+    exactly one JSON value; a body that is malformed or carries trailing data after that value is
+    answered with `400 validation_error`.
 
     **Constraints.** Schema keywords (`minLength`, `pattern`, `enum`, ...) declare the input rules
     to the consumer; the service enforces the same rules and answers a violation with
@@ -47,9 +50,11 @@ paths:
         Creates a resource with a non-empty name and weekly working hours (FR-001, ADR-0004).
         The working hours hold at most one interval per weekday; both bounds are aligned to the
         half hour; each interval lies inside a single UTC day, so its end is after its start (an
-        interval such as 22:00-02:00 crossing midnight is rejected). A missing or empty schedule,
-        an empty name, a second interval on one weekday, a misaligned bound or an end not after
-        its start is answered with `400 validation_error` and nothing is stored.
+        interval such as 22:00-02:00 crossing midnight is rejected). An end of `24:00` is the end
+        of the UTC day, exclusive; a start may not be `24:00`, and no bound lies past `24:00`. A
+        missing or empty schedule, an empty name, a second interval on one weekday, a misaligned
+        bound, a start of `24:00`, a bound past `24:00` or an end not after its start is answered
+        with `400 validation_error` and nothing is stored.
       requestBody:
         required: true
         content:
@@ -144,7 +149,14 @@ paths:
               schema:
                 $ref: '#/components/schemas/Availability'
         '400':
-          $ref: '#/components/responses/ValidationError'
+          description: |
+            `validation_error`: a parameter is missing or malformed, `from` is after `to`, or the
+            range covers more than 14 days counting both ends (`to` later than `from` + 13 days).
+            No booking is read.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
           $ref: '#/components/responses/NotFound'
         '500':
@@ -338,9 +350,10 @@ components:
     WorkingInterval:
       type: object
       description: |
-        The working interval of one weekday, in UTC (ADR-0004). Both bounds are on the half hour
-        and `end` is after `start`, so the interval lies inside one UTC day; `24:00` as `end`
-        denotes the end of that day.
+        The working interval of one weekday, in UTC (ADR-0004), half-open: `start` is included,
+        `end` is excluded. Both bounds are on the half hour and `end` is after `start`, so the
+        interval lies inside one UTC day. `end` may be `24:00`, the end of that UTC day
+        (exclusive); `start` may not be `24:00`, and no bound lies past `24:00`.
       required: [weekday, start, end]
       properties:
         weekday:
@@ -348,12 +361,12 @@ components:
         start:
           type: string
           pattern: '^([01][0-9]|2[0-3]):(00|30)$'
-          description: Start of the interval, `HH:MM` UTC, on the half hour.
+          description: Start of the interval, `HH:MM` UTC, on the half hour, `00:00` to `23:30`; never `24:00`.
           example: '09:00'
         end:
           type: string
           pattern: '^(([01][0-9]|2[0-3]):(00|30)|24:00)$'
-          description: End of the interval, `HH:MM` UTC, on the half hour, after `start`.
+          description: End of the interval, `HH:MM` UTC, on the half hour, after `start`; `24:00` is the end of the UTC day (exclusive), and nothing past it is allowed.
           example: '17:00'
 
     WeeklyHours:

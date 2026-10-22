@@ -245,3 +245,67 @@ func TestContract_BookSlotDeclaresEveryOutcome(t *testing.T) {
 		}
 	}
 }
+
+// ADR-0004 (rev): bounds are half-hour aligned; `end` may be 24:00, the end of the UTC day,
+// exclusive; `start` may not be 24:00; no bound lies past 24:00. The patterns enforce it for the
+// consumer and the prose states it.
+func TestContract_WorkingIntervalFollowsTheTwentyFourHundredRule(t *testing.T) {
+	doc := loadSpec(t)
+	interval := schema(t, doc, "WorkingInterval")
+	cases := []struct {
+		field  string
+		accept []string
+		reject []string
+	}{
+		{"start", []string{"00:00", "09:30", "23:30"}, []string{"24:00", "24:30", "25:00", "09:15", "9:00", "23:59"}},
+		{"end", []string{"00:30", "17:00", "23:30", "24:00"}, []string{"24:30", "25:00", "24:01", "17:15", "9:00"}},
+	}
+	for _, c := range cases {
+		p := interval.Properties[c.field]
+		if p == nil || p.Value.Pattern == "" {
+			t.Fatalf("WorkingInterval.%s declares no pattern", c.field)
+		}
+		re := regexp.MustCompile(p.Value.Pattern)
+		for _, v := range c.accept {
+			if !re.MatchString(v) {
+				t.Errorf("WorkingInterval.%s pattern rejects %q", c.field, v)
+			}
+		}
+		for _, v := range c.reject {
+			if re.MatchString(v) {
+				t.Errorf("WorkingInterval.%s pattern accepts %q", c.field, v)
+			}
+		}
+	}
+	for _, phrase := range []string{"`end` may be `24:00`", "(exclusive)", "`start` may not be `24:00`", "no bound lies past `24:00`"} {
+		if !strings.Contains(interval.Description, phrase) {
+			t.Errorf("WorkingInterval description does not state %q", phrase)
+		}
+	}
+	create := doc.Paths.Find("/resources").Post
+	for _, phrase := range []string{"`24:00` is the end", "exclusive", "a start may not be `24:00`", "no bound lies past `24:00`"} {
+		if !strings.Contains(create.Description, phrase) {
+			t.Errorf("createResource description does not state %q", phrase)
+		}
+	}
+}
+
+// ADR-0018, AC-054: the range rules of getAvailability are stated on the operation and on its
+// 400 response.
+func TestContract_AvailabilityRangeRulesOnErrorResponse(t *testing.T) {
+	doc := loadSpec(t)
+	op := doc.Paths.Find("/resources/{resourceId}/availability").Get
+	resp := op.Responses.Value("400")
+	if resp == nil || resp.Value == nil || resp.Value.Description == nil {
+		t.Fatal("getAvailability declares no described 400 response")
+	}
+	desc := *resp.Value.Description
+	for _, phrase := range []string{"validation_error", "`from` is after `to`", "more than 14 days"} {
+		if !strings.Contains(desc, phrase) {
+			t.Errorf("getAvailability 400 description does not state %q", phrase)
+		}
+	}
+	if s := resp.Value.Content.Get("application/json"); s == nil || s.Schema == nil || s.Schema.Ref != "#/components/schemas/Error" {
+		t.Error("getAvailability 400 does not carry the Error schema")
+	}
+}

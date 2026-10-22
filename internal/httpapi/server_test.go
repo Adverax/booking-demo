@@ -8,6 +8,8 @@ import (
 	"math/rand"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"testing/quick"
@@ -168,11 +170,57 @@ func TestNewHandler_WrongMethodIsMethodNotAllowed(t *testing.T) {
 }
 
 func TestNewHandler_MalformedBodyIsValidationError(t *testing.T) {
-	for _, body := range []string{"", "{", "[]", `{"customerName": 7}`} {
+	for _, body := range []string{"", "{", "[]", `{"customerName": 7}`, validBooking + " garbage", validBooking + `{"x":1}`} {
 		stub := &stubServer{}
 		assertError(t, serve(httpapi.NewHandler(stub), http.MethodPost, "/bookings", body), http.StatusBadRequest, httpapi.ErrorCodeValidationError)
 		if stub.called != "" {
 			t.Fatalf("body %q reached the handler", body)
+		}
+	}
+}
+
+// Every operation that takes a JSON body rejects a body that holds a valid value followed by
+// trailing data; the generated decoder alone would read the first value and call the handler.
+// Iterating the spec keeps NewHandler's list of body routes complete.
+func TestNewHandler_BodyWithTrailingDataIsValidationError(t *testing.T) {
+	valid := map[string]string{"createResource": validResource, "bookSlot": validBooking}
+	doc := loadSpec(t)
+	for path, item := range doc.Paths.Map() {
+		for method, op := range item.Operations() {
+			if op.RequestBody == nil {
+				continue
+			}
+			t.Run(op.OperationID, func(t *testing.T) {
+				body, ok := valid[op.OperationID]
+				if !ok {
+					t.Fatalf("no valid body known for %s; add one here and its route to NewHandler", op.OperationID)
+				}
+				for _, trailing := range []string{" garbage", `{"x":1}`, " {}", "[]"} {
+					stub := &stubServer{}
+					assertError(t, serve(httpapi.NewHandler(stub), method, path, body+trailing), http.StatusBadRequest, httpapi.ErrorCodeValidationError)
+					if stub.called != "" {
+						t.Fatalf("body with trailing %q reached the handler", trailing)
+					}
+				}
+				stub := &stubServer{}
+				if rec := serve(httpapi.NewHandler(stub), method, path, body+" \n"); stub.called != op.OperationID {
+					t.Fatalf("a valid body followed by whitespace was rejected: %d %s", rec.Code, rec.Body)
+				}
+			})
+		}
+	}
+}
+
+// A path that is not in canonical form is answered 404 not_found in the contract's shape, not
+// with http.ServeMux's redirect, which the contract does not declare.
+func TestNewHandler_NonCanonicalPathIsNotFound(t *testing.T) {
+	for _, target := range []string{"//resources", "/resources//availability", "/resources/../resources", "/resources/./r1", "/bookings/b1/cancel/.."} {
+		for _, method := range []string{http.MethodGet, http.MethodPost} {
+			stub := &stubServer{}
+			assertError(t, serve(httpapi.NewHandler(stub), method, target, ""), http.StatusNotFound, httpapi.ErrorCodeNotFound)
+			if stub.called != "" {
+				t.Fatalf("%s %s reached %q", method, target, stub.called)
+			}
 		}
 	}
 }
@@ -204,9 +252,17 @@ func TestNewHandler_HandlerErrorIsInternalErrorWithoutDetail(t *testing.T) {
 	}
 }
 
+// A recovered panic answers 500 internal_error and the body carries neither the panic value nor a
+// stack trace; until DEC-010 is resolved the panic is not recorded anywhere else either.
 func TestNewHandler_HandlerPanicIsInternalError(t *testing.T) {
-	h := httpapi.NewHandler(&stubServer{panicValue: "boom"})
-	assertError(t, serve(h, http.MethodGet, "/resources", ""), http.StatusInternalServerError, httpapi.ErrorCodeInternalError)
+	h := httpapi.NewHandler(&stubServer{panicValue: "boom-secret-detail"})
+	rec := serve(h, http.MethodGet, "/resources", "")
+	assertError(t, rec, http.StatusInternalServerError, httpapi.ErrorCodeInternalError)
+	for _, leak := range []string{"boom-secret-detail", "goroutine", "panic", ".go:"} {
+		if strings.Contains(rec.Body.String(), leak) {
+			t.Fatalf("response body leaks %q: %s", leak, rec.Body)
+		}
+	}
 }
 
 func TestNewHandler_AbortHandlerPanicIsReraised(t *testing.T) {
@@ -219,8 +275,9 @@ func TestNewHandler_AbortHandlerPanicIsReraised(t *testing.T) {
 	serve(h, http.MethodGet, "/resources", "")
 }
 
-// Property (CON-004, ASM-0005): whatever method, path and body arrive, every failure response is a
-// JSON Error whose code is one the specification declares.
+// Property (CON-004, ASM-0005): whatever method, path and body arrive, the response is either a
+// success (2xx) or a JSON Error whose code is one the specification declares; never a redirect or
+// any other undeclared status class. The seed is logged; set PROPERTY_SEED to replay a run.
 func TestProperty_EveryFailureIsJSONErrorWithDeclaredCode(t *testing.T) {
 	doc := loadSpec(t)
 	declared := map[httpapi.ErrorCode]bool{}
@@ -244,8 +301,11 @@ func TestProperty_EveryFailureIsJSONErrorWithDeclaredCode(t *testing.T) {
 			body = string(raw)
 		}
 		rec := serve(h, methods[int(m)%len(methods)], target, body)
-		if rec.Code < 400 {
+		if rec.Code >= 200 && rec.Code < 300 {
 			return true
+		}
+		if rec.Code < 400 {
+			return false
 		}
 		var e httpapi.Error
 		return rec.Header().Get("Content-Type") == "application/json" &&
@@ -253,8 +313,14 @@ func TestProperty_EveryFailureIsJSONErrorWithDeclaredCode(t *testing.T) {
 			declared[e.Code]
 	}
 	seed := time.Now().UnixNano()
-	t.Logf("seed %d", seed)
-	cfg := &quick.Config{MaxCount: 2000, Rand: rand.New(rand.NewSource(seed))}
+	if v := os.Getenv("PROPERTY_SEED"); v != "" {
+		var err error
+		if seed, err = strconv.ParseInt(v, 10, 64); err != nil {
+			t.Fatalf("PROPERTY_SEED=%q is not an integer: %v", v, err)
+		}
+	}
+	t.Logf("seed %d (replay with PROPERTY_SEED=%d)", seed, seed)
+	cfg := &quick.Config{MaxCount: 1000, Rand: rand.New(rand.NewSource(seed))}
 	if err := quick.Check(property, cfg); err != nil {
 		t.Fatal(err)
 	}

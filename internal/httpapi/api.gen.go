@@ -178,14 +178,15 @@ type Weekday string
 // (ADR-0004); weekdays without an interval are closed. Order is not significant.
 type WeeklyHours = []WorkingInterval
 
-// WorkingInterval The working interval of one weekday, in UTC (ADR-0004). Both bounds are on the half hour
-// and `end` is after `start`, so the interval lies inside one UTC day; `24:00` as `end`
-// denotes the end of that day.
+// WorkingInterval The working interval of one weekday, in UTC (ADR-0004), half-open: `start` is included,
+// `end` is excluded. Both bounds are on the half hour and `end` is after `start`, so the
+// interval lies inside one UTC day. `end` may be `24:00`, the end of that UTC day
+// (exclusive); `start` may not be `24:00`, and no bound lies past `24:00`.
 type WorkingInterval struct {
-	// End End of the interval, `HH:MM` UTC, on the half hour, after `start`.
+	// End End of the interval, `HH:MM` UTC, on the half hour, after `start`; `24:00` is the end of the UTC day (exclusive), and nothing past it is allowed.
 	End string `json:"end"`
 
-	// Start Start of the interval, `HH:MM` UTC, on the half hour.
+	// Start Start of the interval, `HH:MM` UTC, on the half hour, `00:00` to `23:30`; never `24:00`.
 	Start   string  `json:"start"`
 	Weekday Weekday `json:"weekday"`
 }
@@ -837,7 +838,7 @@ func (response GetAvailability200JSONResponse) VisitGetAvailabilityResponse(w ht
 	return json.NewEncoder(w).Encode(response)
 }
 
-type GetAvailability400JSONResponse struct{ ValidationErrorJSONResponse }
+type GetAvailability400JSONResponse Error
 
 func (response GetAvailability400JSONResponse) VisitGetAvailabilityResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")

@@ -9,9 +9,12 @@
 package httpapi
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
+	"path"
 )
 
 // maxRequestBodyBytes caps how much of a request body is read. The largest request of the
@@ -19,11 +22,25 @@ import (
 // memory a malformed or hostile body can take.
 const maxRequestBodyBytes = 1 << 20
 
+// jsonBodyRoutes are the ServeMux patterns of the operations that take a JSON request body. The
+// generated decoder reads only the first JSON value of a body, so NewHandler checks the whole body
+// of these routes first. TestNewHandler_BodyWithTrailingDataIsValidationError keeps this set equal
+// to the operations of api/openapi.yaml that declare a requestBody.
+var jsonBodyRoutes = map[string]bool{
+	"POST /resources": true,
+	"POST /bookings":  true,
+}
+
 // NewHandler mounts the generated routes on a new http.ServeMux, backed by ssi, and returns the
 // handler to serve. Failures detected before or around ssi are answered with the contract's error
 // shape:
-//   - unknown path: 404 not_found; known path with another method: 405 method_not_allowed;
-//   - malformed path or query parameter, malformed JSON body: 400 validation_error;
+//   - unknown path, or a path that is not in canonical form (an empty segment, "." or ".."), which
+//     http.ServeMux would otherwise answer with a redirect: 404 not_found; known path with another
+//     method: 405 method_not_allowed;
+//   - malformed path or query parameter: 400 validation_error;
+//   - on an operation that takes a JSON body, a body that is not exactly one JSON value (empty,
+//     malformed, or followed by trailing data): 400 validation_error; a well-formed body of the
+//     wrong type: 400 validation_error from the generated decoder;
 //   - body over maxRequestBodyBytes: 413 request_too_large;
 //   - an error returned by ssi, or a panic before anything was written: 500 internal_error,
 //     without the error text.
@@ -37,11 +54,28 @@ func NewHandler(ssi StrictServerInterface) http.Handler {
 		StdHTTPServerOptions{BaseRouter: mux, ErrorHandlerFunc: writeRequestError},
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if h, pattern := mux.Handler(r); pattern == "" {
+		if !isCanonicalPath(r.URL.Path) {
+			writeError(w, http.StatusNotFound, ErrorCodeNotFound, "not found")
+			return
+		}
+		h, pattern := mux.Handler(r)
+		if pattern == "" {
 			writeRouteError(w, r, h)
 			return
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodyBytes)
+		if jsonBodyRoutes[pattern] {
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				writeRequestError(w, r, err)
+				return
+			}
+			if !json.Valid(body) {
+				writeError(w, http.StatusBadRequest, ErrorCodeValidationError, "request body is not a single JSON value")
+				return
+			}
+			r.Body = io.NopCloser(bytes.NewReader(body))
+		}
 		tw := &trackingWriter{ResponseWriter: w}
 		defer recoverAsInternalError(tw)
 		mux.ServeHTTP(tw, r)
@@ -88,7 +122,24 @@ func recoverAsInternalError(tw *trackingWriter) {
 	if v == http.ErrAbortHandler || tw.wrote {
 		panic(v)
 	}
+	// TODO(DEC-010): the panic value and stack are dropped here, so a recovered panic leaves no
+	// trace (net/http would have logged it). Whether and how the service logs is undecided;
+	// record the panic here once DEC-010 is resolved.
 	writeError(tw, http.StatusInternalServerError, ErrorCodeInternalError, "internal error")
+}
+
+// isCanonicalPath reports whether p is already in the form http.ServeMux routes on: rooted, and
+// unchanged by path.Clean apart from a kept trailing slash. ServeMux answers any other path with a
+// redirect to its cleaned form, which the contract does not declare.
+func isCanonicalPath(p string) bool {
+	if p == "" || p[0] != '/' {
+		return false
+	}
+	clean := path.Clean(p)
+	if p[len(p)-1] == '/' && clean != "/" {
+		clean += "/"
+	}
+	return clean == p
 }
 
 // writeRouteError answers a request that matches no route. h is the handler http.ServeMux chose
