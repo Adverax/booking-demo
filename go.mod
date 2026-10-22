@@ -2,6 +2,8 @@ module github.com/adverax/booking-demo
 
 go 1.26.0
 
+toolchain go1.26.10
+
 require modernc.org/sqlite v1.61.0
 
 require (

@@ -10,6 +10,11 @@
       "id": "BSD-3-Clause",
       "reason": "Permissive licence, compatible with MIT distribution of the binary (keep the notices); used by modernc.org/sqlite and its modernc.org/libc, mathutil, memory dependencies, github.com/google/uuid, github.com/remyoudompheng/bigfft, golang.org/x/sys (go-licenses v2.0.1 report, 2026-10-22). Owner: roman.miakotin.",
       "expires": "2027-10-22"
+    },
+    {
+      "id": "Apache-2.0",
+      "reason": "Permissive licence, compatible with distributing the binary under this project's MIT licence (keep the NOTICE and licence text); used by github.com/oapi-codegen/runtime, the runtime library of the code generated from api/openapi.yaml (ADR-0009). Approved by the project owner on 2026-10-22 after the dependency gate refused CARD-001. Owner: roman.miakotin.",
+      "expires": "2027-10-22"
     }
   ]
 }
