@@ -1,6 +1,7 @@
 # Changelog
 
 ## 2026-10-22
+- CARD-004 (feature): Added cancelling a booking by its id with one autocommit update (a repeated cancel returns the same cancelled booking, an unknown id is 404 not_found) and reading a booking by id, and made cancellation final twice over: a domain guard and a schema trigger (migration 0002) that aborts any update from cancelled to another status, answered as 409 booking_cancelled.
 - CARD-006 (feature): Added full validation of resource creation (a name, weekly working hours with at most one half-hour-aligned interval per weekday inside one UTC day, where 24:00 is allowed only as an interval end), answered with a 400 validation_error before anything is stored, plus listing resources and reading one by id with a 404 not_found for an unknown id.
 - CARD-003 (feature): Added the service bootstrap (environment configuration, store open with migrations, HTTP server with timeouts and graceful shutdown), minimal resource creation, and booking of one slot as a single autocommit insert where the slot uniqueness index picks exactly one winner among concurrent requests and the others get a slot_taken conflict.
 - CARD-001 (feature): Added the OpenAPI contract for resources, availability and bookings with one stable set of error codes, and the generated net/http server interface mounted on http.ServeMux with JSON error responses for malformed requests.
