@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -95,5 +96,66 @@ func TestStore_InsertResourceIsAllOrNothing(t *testing.T) {
 	}
 	if resources != 0 || hours != 0 {
 		t.Fatalf("after a failed insert: %d resources, %d interval rows", resources, hours)
+	}
+}
+
+func TestStore_ListResourcesReturnsAllInCreationOrderWithHoursByWeekday(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	if rs, err := s.ListResources(ctx); err != nil || rs == nil || len(rs) != 0 {
+		t.Fatalf("empty store: %#v, %v; want an empty, non-nil list", rs, err)
+	}
+	lee := catalog.Resource{ID: "z-lee", Name: "Dr. Lee", WeeklyHours: []catalog.Interval{
+		{Weekday: time.Sunday, Start: 1320, End: 1440},
+		{Weekday: time.Monday, Start: 540, End: 1020},
+	}}
+	room := catalog.Resource{ID: "a-room", Name: "Room A", WeeklyHours: []catalog.Interval{
+		{Weekday: time.Saturday, Start: 0, End: 30},
+	}}
+	for _, r := range []catalog.Resource{lee, room} {
+		if err := s.InsertResource(ctx, r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rs, err := s.ListResources(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []catalog.Resource{lee, room}; !reflect.DeepEqual(rs, want) {
+		t.Fatalf("listed %+v, want %+v", rs, want)
+	}
+}
+
+func TestStore_GetResourceReturnsTheResourceOrNotFound(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	r := catalog.Resource{ID: "r1", Name: "Room A", WeeklyHours: []catalog.Interval{
+		{Weekday: time.Monday, Start: 540, End: 1020},
+		{Weekday: time.Friday, Start: 600, End: 1440},
+	}}
+	if err := s.InsertResource(ctx, r); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.InsertResource(ctx, catalog.Resource{ID: "r2", Name: "Other", WeeklyHours: []catalog.Interval{{Weekday: time.Monday, Start: 0, End: 60}}}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.GetResource(ctx, "r1")
+	if err != nil || !reflect.DeepEqual(got, r) {
+		t.Fatalf("got %+v, %v; want %+v", got, err, r)
+	}
+	if _, err := s.GetResource(ctx, "missing-id"); !errors.Is(err, catalog.ErrNotFound) {
+		t.Fatalf("unknown id: err = %v, want catalog.ErrNotFound", err)
+	}
+}
+
+// A closed store reports its failure as an error, not as "not found" or an empty list.
+func TestStore_ResourceReadsReportStoreFailures(t *testing.T) {
+	s := openTestStore(t)
+	s.Close()
+	if _, err := s.ListResources(context.Background()); err == nil {
+		t.Error("ListResources on a closed store succeeded")
+	}
+	if _, err := s.GetResource(context.Background(), "r1"); err == nil || errors.Is(err, catalog.ErrNotFound) {
+		t.Errorf("GetResource on a closed store: err = %v", err)
 	}
 }
