@@ -1,0 +1,11 @@
+# forge — run cost signals (FR-082, CARD-161): computed at run end by
+# skills/kanban/scripts/run_spend.py run-end from this run's FR-031 journal
+# entries grouped by forge.card. usd is an ESTIMATE (ADR-0121).
+run_id: '2026-10-21T17:24:03Z'
+prices_snapshot_date: '2026-09-25'
+cost_per_card_usd:
+  'CARD-001': 'partial (null, 1 unmeasured)'
+  'CARD-002': 'partial (null, 5 unmeasured)'
+tokens_per_card:
+  'CARD-001': 'partial ({input_tokens: 0, output_tokens: 0}, 1 unmeasured)'
+  'CARD-002': 'partial ({input_tokens: 0, output_tokens: 0}, 5 unmeasured)'

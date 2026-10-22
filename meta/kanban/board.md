@@ -1,12 +1,12 @@
 # Kanban Board
 
-_Updated: 2026-10-21 20:18_
+_Updated: 2026-10-22 09:31_
 
 ## Wave plan
 | Wave | Cards | Status |
 |------|-------|--------|
-| 1 | CARD-001 P1, CARD-002 P1 | ▶ active |
-| 2 | CARD-003 P1 | ⏳ blocked (→ CARD-001, CARD-002) |
+| 1 | CARD-001 P1, CARD-002 P1 | ✓ done |
+| 2 | CARD-003 P1 | ▶ active |
 | 3 | CARD-004 P1, CARD-006 P2 | ⏳ blocked (→ CARD-003) |
 | 4 | CARD-005 P1 | ⏳ blocked (→ CARD-004) |
 | 5 | CARD-007 P1, CARD-008 P1 | ⏳ blocked (→ CARD-004, CARD-005, CARD-006) |
@@ -15,8 +15,6 @@ _Updated: 2026-10-21 20:18_
 _Gantt: [meta/kanban/gantt.md](gantt.md)_
 
 ## Ready
-- **CARD-001** P1 · OpenAPI contract and generated server interface  _(wave 1)_
-- **CARD-002** P1 · SQLite store and embedded schema migrations  _(wave 1)_
 - **CARD-003** P1 · Walking skeleton: bootstrap, minimal resource creation and booking one slot  _(wave 2)_
 - **CARD-004** P1 · Cancel a booking and keep cancellation final  _(wave 3)_
 - **CARD-005** P1 · Idempotent booking replay with insert-then-classify  _(wave 4)_
@@ -31,7 +29,8 @@ _(none)_
 _(none)_
 
 ## Done
-_(none)_
+- **CARD-001** OpenAPI contract and generated server interface
+- **CARD-002** SQLite store and embedded schema migrations
 
 ## Blocked
 - **CARD-009** 🔒 Release criteria suite and supervisor deployment sample  ← readiness — blocking_decisions_resolved, dependencies_resolved

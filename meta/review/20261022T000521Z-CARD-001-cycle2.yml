@@ -1,0 +1,171 @@
+version: 1
+generated_at: "2026-10-22T00:05:21Z"
+target: "card/001-openapi-contract (git diff main, worktree incl. uncommitted fix-round edits; base 8e53bdd, head 1a6029e + worktree)"
+overall_score: 9.5
+risk_level: low
+review_lane: fast
+reviewer: forge:review
+reviewer_version: "2026.10.10"
+model: "opus"
+cycle: 2
+mode: confirmation
+
+task_contract_verdict: pass
+system_contract_verdict: pass
+overall_verdict: pass
+
+security: applicable (0 findings)
+
+coverage:
+  read:
+    - "fix delta: git diff HEAD of api/openapi.yaml, internal/httpapi/api.gen.go, contract_test.go, server.go, server_test.go"
+    - internal/httpapi/server.go (full)
+    - internal/httpapi/server_test.go (changed tests)
+    - internal/httpapi/api.gen.go (route registration :550-556, body decoders :927, :1034)
+    - meta/kanban/cards/CARD-001.md (worktree copy, Failure matrix, Worktree notes)
+    - meta/review/20261021T235509Z-CARD-001-cycle1.yml (main repo)
+    - shared/review-protocol.md, skills/review/references/confirmation-mode.md
+  not_reached:
+    - "unchanged since cycle 1 and not re-read in full: go.mod, go.sum, generate.go, oapi-codegen.yaml (outside the fix delta)"
+  confidence: high
+metrics:
+  diff: { files: 10, added: 2757, removed: 2 }
+  tests_cover_change: true
+  hotspots: []
+  build_vet_test: "go vet ./... && go test ./... green on the worktree (internal/httpapi, internal/store)"
+  impact_set: "meta/impact/impact-set-8e53bdd9ed3f-1a6029eee490-worktree.json (outcome computed, diff_digest sha256:45530a26...)"
+  unmeasured:
+    max_fan_in: "no_eligible_fact — NewHandler and the generated types have no production caller yet; the composition root is CARD-003"
+    cochange_missing: "no_eligible_fact — history holds 1 commit per touched code file; no co-change peers to mine"
+
+system_contract:
+  rules_checked: 11
+  holds: 3
+  unchecked: 8
+  violated: 0
+  verdicts:
+    - "ADR-0010/R1 ⚠ unchecked — check_ref_missing: TestBooking_CannotReactivate (grep 'func TestBooking_CannotReactivate' over the worktree: 0); manual read of the delta found no reactivation operation"
+    - "ADR-0012/R1 ⚠ unchecked — no_eligible_fact: no booking write path and no SQL in the diff (grep database/sql over internal/httpapi/server.go, api.gen.go: 0)"
+    - "ADR-0013/R1 ✓ holds — grep 'time.Now' over internal/httpapi/server.go and api.gen.go: 0 matches; the delta adds no clock read and stores nothing"
+    - "ADR-0015/R1 ✓ holds — grep 'Trim|ToLower|EqualFold' over internal/httpapi/server.go and api.gen.go: 0 matches; the new body pre-check (server.go:68-78) restores the exact bytes read (bytes.NewReader(body)), so customerName and idempotencyKey reach the decoder unchanged"
+    - "CON-007 ⚠ unchecked — no_eligible_fact: no booking write path and no SQL in this diff"
+    - "CON-008 ✓ holds — TestContract_InstantsAreDateTimeStrings (contract_test.go) passes; no clock read in non-test code (grep time.Now: 0); storage half not in this diff"
+    - "INV-001 ⚠ unchecked — check_ref_missing: TestBookSlot_* and TestProperty_Booking_NoOverlapUnderConcurrency not present in this worktree (owning card CARD-005); manual read: spec declares slot_taken 409, no booking logic in the diff"
+    - "INV-002 ⚠ unchecked — check_ref_missing: TestBookSlot_AcceptsSlotStartingExactlyNow and the other 4 named tests (grep: 0); manual read: openapi.yaml bookSlot states start == now accepted and key looked up before the past-slot check"
+    - "INV-003 ⚠ unchecked — check_ref_missing: all 17 named tests (CARD-005); manual read: openapi.yaml bookSlot declares replay 200, mismatch 409 idempotency_key_conflict, also after the slot started"
+    - "INV-004 ⚠ unchecked — check_ref_missing: TestSchema_RejectsCancelledToActiveTransition and the other 4 named tests (grep: 0); manual read found no reactivation operation"
+    - "INV-005 ⚠ unchecked — check_ref_missing: all 8 TestCreateResource_* tests (grep: 0, domain card); manual read: start pattern excludes 24:00, end pattern allows 24:00 and nothing beyond, prose now states every clause, pinned by TestContract_WorkingIntervalFollowsTheTwentyFourHundredRule"
+
+root_causes: []
+
+previous_findings:
+  - file: internal/httpapi/server.go
+    title: "JSON body with trailing data reaches the handler; declared failure-matrix row refuted"
+    status: fixed
+    evidence: "server.go:66-78 reads the body through MaxBytesReader and rejects unless json.Valid; TestNewHandler_BodyWithTrailingDataIsValidationError iterates every spec operation with a requestBody (4 trailing forms + whitespace-accepted case) and passes"
+  - file: internal/httpapi/server.go
+    title: "Non-canonical paths get an undeclared 307 text/html redirect; property test masks it"
+    status: fixed
+    evidence: "server.go:57 isCanonicalPath before routing -> 404 not_found; TestNewHandler_NonCanonicalPathIsNotFound passes; property test now fails on any non-2xx below 400 (server_test.go:304-309); info.description declares it"
+  - file: api/openapi.yaml
+    title: "ADR-0004 24:00 rule stated only by pattern, prose incomplete and untested"
+    status: fixed
+    evidence: "WorkingInterval and createResource prose state end 24:00 exclusive, start never 24:00, nothing past 24:00; TestContract_WorkingIntervalFollowsTheTwentyFourHundredRule pins both patterns and the prose"
+  - file: api/openapi.yaml
+    title: "AC-054 range ordering not documented on the error response"
+    status: fixed
+    evidence: "getAvailability 400 has an inline description naming from-after-to and >14 days; TestContract_AvailabilityRangeRulesOnErrorResponse passes; api.gen.go regenerated (GetAvailability400JSONResponse Error) and drift test green"
+  - file: internal/httpapi/server.go
+    title: "Recovered handler panic is swallowed without any trace"
+    status: fixed
+    evidence: "TODO(DEC-010) at server.go:125-127 names the gap without deciding DEC-010"
+  - file: internal/httpapi/server_test.go
+    title: "Property test seed not overridable and case count above budget"
+    status: fixed
+    evidence: "PROPERTY_SEED env override (server_test.go:316-322), MaxCount 1000 (:323)"
+  - file: internal/httpapi/server_test.go
+    title: "No dev/e2e request/response validation against the spec"
+    status: open
+    evidence: "SKIPPED by direction: no dev/e2e server exists before CARD-003; kept as out-of-scope follow-up"
+  - file: api/openapi.yaml
+    title: "\"Responses always carry Z\" is not enforced by generated time.Time types"
+    status: open
+    evidence: "out of scope; handler cards' job (CON-008)"
+  - file: meta/kanban/cards/CARD-001.md
+    title: "Card is untraced (FR: —) and 8 system rules carry dead check refs"
+    status: open
+    evidence: "out of scope; model/pipeline note, not code"
+
+findings:
+  - id: F-010
+    severity: low
+    category: tech-debt
+    type: risk
+    file: meta/kanban/cards/CARD-001.md
+    line: 92
+    title: "Failure-matrix memory bound says the body is held once, but the generated decoder buffers a second copy"
+    description: |
+      The oversized-body row declares "body held in memory once (< 2 MiB buffer capacity)". NewHandler
+      keeps the io.ReadAll slice (server.go:68) and hands it to the generated decoder as a
+      bytes.Reader; json.NewDecoder (api.gen.go:927, :1034) then copies the bytes into its own
+      internal buffer, so a 1 MiB body occupies about two body-sized buffers plus the decoded value.
+      Still bounded (O(body), well under a few MiB per request), so not a correctness or DoS defect;
+      the declared figure is just inaccurate. In scope: the row and server.go are in the fix delta.
+    suggestion: |
+      Restate the bound as "about two body-sized buffers (read slice + decoder buffer), each <= 1 MiB + 1 B",
+      or leave the code as is and correct only the declaration.
+    confidence: high
+    source: static
+    violates: null
+    root_cause: null
+    status: open
+
+  - id: F-007
+    severity: info
+    category: tech-debt
+    type: gap
+    file: internal/httpapi/server_test.go
+    line: null
+    title: "No dev/e2e request/response validation against the spec"
+    description: "Carried from cycle 1, skipped by direction: no dev/e2e server exists before CARD-003. Out of scope for this card."
+    suggestion: "Wire runtime spec validation into the dev/e2e server in CARD-003 (not into the production binary)."
+    confidence: high
+    source: static
+    violates: null
+    status: open
+
+  - id: F-008
+    severity: info
+    category: tech-debt
+    type: risk
+    file: api/openapi.yaml
+    line: 19
+    title: "\"Responses always carry Z\" is not enforced by generated time.Time types"
+    description: "Carried from cycle 1; handler cards' job (CON-008)."
+    suggestion: "Handler cards emit .UTC() instants."
+    confidence: high
+    source: static
+    violates: null
+    status: open
+
+  - id: F-009
+    severity: info
+    category: tech-debt
+    type: question
+    file: meta/kanban/cards/CARD-001.md
+    line: null
+    title: "Card is untraced (FR: —) and 8 system rules carry dead check refs"
+    description: "Carried from cycle 1; expected while the owning cards are not done."
+    suggestion: "No action on this card."
+    confidence: high
+    source: model
+    violates: null
+    status: open
+
+minor_triage:
+  sampled: 1
+  total: 1
+  items:
+    - finding: "Failure-matrix memory bound says the body is held once, but the generated decoder buffers a second copy"
+      should_gate: false
+      rationale: "Declaration wording only; memory stays O(body) under the 1 MiB cap, no behavior or contract is wrong."

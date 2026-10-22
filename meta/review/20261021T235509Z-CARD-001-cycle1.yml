@@ -1,0 +1,266 @@
+version: 1
+generated_at: "2026-10-21T23:58:40Z"
+target: "card/001-openapi-contract (main...HEAD, 8e53bdd..1a6029e)"
+overall_score: 7.5
+risk_level: medium
+review_lane: fast
+reviewer: forge:review
+reviewer_version: "2026.10.10"
+model: "opus"
+
+task_contract_verdict: pass
+system_contract_verdict: pass
+overall_verdict: pass
+
+security: applicable (0 findings)
+
+coverage:
+  read:
+    - api/openapi.yaml
+    - internal/httpapi/server.go
+    - internal/httpapi/server_test.go
+    - internal/httpapi/contract_test.go
+    - internal/httpapi/generate.go
+    - internal/httpapi/oapi-codegen.yaml
+    - internal/httpapi/api.gen.go (routing, wrappers, strict handler, response visitors)
+    - go.mod
+    - meta/architecture/decisions/adr/0004-weekly-working-hours-shape.md
+    - meta/architecture/decisions/adr/0009-http-layer-openapi-first.md
+    - meta/architecture/decisions/open.yml (DEC-010)
+    - meta/architecture/requirements.yml (CON-001, AC-016, AC-018, AC-034, AC-047, AC-050, AC-054, FR-004)
+    - meta/kanban/cards/CARD-001.md
+  not_reached:
+    - go.sum (checksums only; go mod verify reported clean at rebase)
+    - api.gen.go embedded spec / parameter-binding helpers (generated, pinned by TestContract_GeneratedCodeMatchesSpec)
+  confidence: high
+metrics:
+  diff: { files: 9, added: 2523, removed: 1 }
+  tests_cover_change: true
+  hotspots: []
+  cochange_missing: []
+  build_vet_test: "go build ./... && go vet ./... && go test ./... green on 1a6029e"
+  unmeasured:
+    max_fan_in: "no_eligible_fact — NewHandler and the generated types have no production caller yet; the composition root is CARD-003"
+    reverse_deps: "no_eligible_fact — impact set underivable: manifest_changed (api/openapi.yaml, go.mod) and no_recipe for oapi-codegen.yaml"
+    cochange_missing: "no_eligible_fact — repository history holds 1 commit per touched code file; co-change pairs exist only among meta/kanban cards"
+    fan_in_generate_go: "no_eligible_fact — no_exported_symbols"
+    fan_in_oapi_codegen_yaml: "no_eligible_fact — no_symbol_extractor"
+
+system_contract:
+  rules_checked: 11
+  holds: 3
+  unchecked: 8
+  violated: 0
+  verdicts:
+    - "ADR-0010/R1 ⚠ unchecked — check_ref_missing: TestBooking_CannotReactivate; manual read of this diff found no violation (no write path; openapi.yaml:261-262 and :464 declare cancelled final, no operation reactivates)"
+    - "ADR-0012/R1 ⚠ unchecked — no_eligible_fact: the diff contains no booking write path and no SQL (internal/httpapi has no database/sql import)"
+    - "ADR-0013/R1 ✓ holds — grep 'time.Now' over internal/httpapi/server.go and api.gen.go: 0 matches; nothing is stored by this diff; instants are time.Time only at the boundary (api.gen.go:79,91-92,170-171)"
+    - "ADR-0015/R1 ✓ holds — grep 'Trim|ToLower|EqualFold' over internal/httpapi/server.go and api.gen.go: 0 matches; customerName and idempotencyKey are decoded by encoding/json unchanged; spec declares byte-for-byte comparison (openapi.yaml:164,450,455-459). Slot-sameness comparison itself belongs to CARD-005"
+    - "CON-007 ⚠ unchecked — no_eligible_fact: no booking write path and no SQL in this diff"
+    - "CON-008 ✓ holds — every instant is format date-time (TestContract_InstantsAreDateTimeStrings, contract_test.go:174-188); no clock read in non-test code (grep time.Now: 0); storage half not in this diff"
+    - "INV-001 ⚠ unchecked — check_ref_missing: TestBookSlot_RejectsAlreadyBookedSlot, TestBookSlot_SameStartOnAnotherResourceIsNotTheSameSlot, TestBookSlot_SlotTakenStoresNothingUnderNewKey, TestProperty_Booking_NoOverlapUnderConcurrency (partial; TestBookSlot_50ConcurrentRequestsExactlyOneWins exists); manual read: the diff has no booking logic, the spec declares slot_taken 409"
+    - "INV-002 ⚠ unchecked — check_ref_missing: TestBookSlot_AcceptsSlotStartingExactlyNow, TestBookSlot_RejectsSlotInThePast, TestBookSlot_RejectsSlotOutsideWorkingHours, TestBookSlot_RejectsSlotStartingOneSecondBeforeNow, TestBookSlot_UnknownKeyForPastSlotIsRejectedAsPast; manual read: openapi.yaml:178-183 states start==now accepted and key looked up first"
+    - "INV-003 ⚠ unchecked — check_ref_missing: all 17 named tests (CARD-005); manual read: openapi.yaml:166-183 declares replay 200, mismatch 409 idempotency_key_conflict, also after slot start"
+    - "INV-004 ⚠ unchecked — check_ref_missing: TestBookSlot_RepeatAfterCancelCreatesNoNewBooking, TestBooking_CancelledStaysCancelled, TestBooking_CannotReactivate, TestBooking_NewBookingAfterCancelCreatesNewId, TestSchema_RejectsCancelledToActiveTransition; manual read found no reactivation operation"
+    - "INV-005 ⚠ unchecked — check_ref_missing: all 8 TestCreateResource_* tests (domain card); manual read: openapi.yaml:350 start pattern excludes 24:00, :355 end allows 24:00 and nothing beyond, half-hour aligned, minLength 1 name, minItems 1"
+
+root_causes:
+  - id: RC-1
+    title: "NewHandler trusts the generated decoder and ServeMux defaults beyond what the failure matrix declares"
+    finding_ids: [F-001, F-002]
+  - id: RC-2
+    title: "ADR-0004 / ADR-0018 clauses documented by schema keyword only, not in prose or tests"
+    finding_ids: [F-003, F-004]
+
+findings:
+  - id: F-001
+    severity: medium
+    category: tech-debt
+    type: bug
+    file: internal/httpapi/server.go
+    line: 44
+    title: "JSON body with trailing data reaches the handler; declared failure-matrix row refuted"
+    description: |
+      The failure matrix declares: malformed JSON body on POST /resources and POST /bookings ->
+      400 validation_error, handler not called (0 handler calls). The generated strict handler
+      decodes with json.NewDecoder(r.Body).Decode(&body) (api.gen.go:926, :1033), which reads only
+      the first JSON value. Reproduced on a scratch copy of HEAD: POST /bookings with body
+      `<validBooking> garbage` or `<validBooking>{"x":1}` -> 201 and stub.called == "bookSlot".
+      The body is not valid JSON, yet the handler runs. NewHandler (server.go:39-48) adds no guard,
+      and TestNewHandler_MalformedBodyIsValidationError (server_test.go:170-178) has no
+      trailing-data case.
+    suggestion: |
+      In NewHandler, for requests with a body, read it through the existing MaxBytesReader, reject
+      with validation_error unless json.Valid(body) (MaxBytesError still maps to 413), then restore
+      r.Body = io.NopCloser(bytes.NewReader(body)). Add `validBooking+" x"` and
+      `validBooking+"{}"` to the malformed-body test table. Alternatively narrow the failure-matrix
+      row, but the spec's "service enforces the same rules" makes rejection the consistent choice.
+    confidence: high
+    source: static
+    violates: null
+    root_cause: RC-1
+    status: open
+    fixed_in: null
+    dismissed_reason: null
+    learned_pattern: null
+
+  - id: F-002
+    severity: low
+    category: tech-debt
+    type: risk
+    file: internal/httpapi/server.go
+    line: 40
+    title: "Non-canonical paths get an undeclared 307 text/html redirect; property test masks it"
+    description: |
+      For //resources, /resources//availability or /resources/../resources, http.ServeMux returns a
+      redirect handler with a non-empty pattern, so NewHandler forwards it and the client gets
+      307 text/html (reproduced). The contract lists only 404/405/500 as path-level responses.
+      TestProperty_EveryFailureIsJSONErrorWithDeclaredCode returns true for any status < 400
+      (server_test.go:247), so it cannot catch this.
+    suggestion: |
+      Either answer redirects as 404 not_found (check the recorded status in writeRouteError style)
+      or declare the behaviour in the spec description; make the property require 2xx-with-JSON or
+      a declared error, not merely < 400.
+    confidence: high
+    source: static
+    root_cause: RC-1
+    status: open
+
+  - id: F-003
+    severity: low
+    category: tech-debt
+    type: gap
+    file: api/openapi.yaml
+    line: 340
+    title: "ADR-0004 24:00 rule stated only by pattern, prose incomplete and untested"
+    description: |
+      The patterns (openapi.yaml:350, :355) encode the revised ADR-0004 correctly, but the prose
+      says only "24:00 as end denotes the end of that day": it omits "exclusive", that a start may
+      not be 24:00, and that no bound exceeds 24:00; the createResource description (:46-52) does
+      not mention 24:00 at all. No contract test pins either pattern
+      (TestContract_DeclaresInputConstraints, contract_test.go:192-225), so a regression of the
+      24:00 rule in the spec would pass CI.
+    suggestion: |
+      State the three clauses in WorkingInterval / createResource prose, and assert in a contract
+      test that start rejects 24:00 and end accepts 24:00 but rejects 24:30.
+    confidence: high
+    source: model
+    root_cause: RC-2
+    status: open
+
+  - id: F-004
+    severity: low
+    category: tech-debt
+    type: gap
+    file: api/openapi.yaml
+    line: 146
+    title: "AC-054 range ordering not documented on the error response"
+    description: |
+      The task contract (ADR-0018) asks that the from-after-to rule be documented on the operation
+      AND its error response. It is on the operation (:118-122) and the `from` parameter (:128),
+      but the 400 response is the shared ValidationError ref whose description is generic (:296).
+    suggestion: |
+      Give getAvailability an inline 400 response whose description names the 14-day and
+      from-after-to rules, still with the Error schema.
+    confidence: medium
+    source: model
+    root_cause: RC-2
+    status: open
+
+  - id: F-005
+    severity: low
+    category: tech-debt
+    type: gap
+    file: internal/httpapi/server.go
+    line: 83
+    title: "Recovered handler panic is swallowed without any trace"
+    description: |
+      recoverAsInternalError turns a panic into 500 and drops the value and stack; without it
+      net/http would at least log the stack. Engineering-standards panic recovery logs the stack
+      with request context. Logging is an open decision (DEC-010), so this is not gating.
+    suggestion: |
+      Add a TODO(DEC-010) at the recover site, or route the gap to the DEC-010 decision so the
+      first handler card does not ship silent panics.
+    confidence: high
+    source: static
+    status: open
+
+  - id: F-006
+    severity: low
+    category: tech-debt
+    type: risk
+    file: internal/httpapi/server_test.go
+    line: 255
+    title: "Property test seed not overridable and case count above budget"
+    description: |
+      The seed is time.Now().UnixNano() (logged, but reproducing needs a code edit) and MaxCount is
+      2000, above the ~100-1000 seeded-case budget of engineering-standards section 6.
+    suggestion: |
+      Read an optional seed from an env var or test flag, default to a fixed or logged seed, and
+      cap MaxCount at 1000.
+    confidence: high
+    source: static
+    status: open
+
+  - id: F-007
+    severity: low
+    category: tech-debt
+    type: gap
+    file: internal/httpapi/server_test.go
+    line: 94
+    title: "No dev/e2e request/response validation against the spec"
+    description: |
+      Engineering-standards section 2 point 7 asks the dev/e2e run to validate requests/responses
+      against the OpenAPI spec when the stack has first-class middleware (kin-openapi openapi3filter).
+      The card declines a runtime validator in the binary (CARD-001 notes); nothing validates the
+      stub or future handler responses against the spec in tests either. No dev/e2e server exists
+      in this diff (CARD-003), so not gating here.
+    suggestion: |
+      Validate responses in server tests (and later CARD-009 e2e) with openapi3filter, test-only,
+      which keeps kin-openapi out of the binary.
+    confidence: medium
+    source: static
+    status: open
+
+  - id: F-008
+    severity: info
+    category: tech-debt
+    type: risk
+    file: api/openapi.yaml
+    line: 17
+    title: "\"Responses always carry Z\" is not enforced by the generated types"
+    description: |
+      Generated instants are time.Time; encoding/json emits the value's own offset, so a handler
+      passing a non-UTC time breaks the promise. Out of scope: handler cards CARD-004..CARD-008
+      must convert with .UTC() (CON-008).
+    suggestion: "Follow-up note on the handler cards; out of scope for this card."
+    confidence: high
+    source: static
+    status: open
+
+  - id: F-009
+    severity: info
+    category: tech-debt
+    type: question
+    file: meta/kanban/cards/CARD-001.md
+    line: null
+    title: "Card is untraced (FR: —) and 8 system rules carry dead check refs"
+    description: |
+      Noted once per Step 8c: the card has no acceptance-criteria section. system_rules.py
+      --verify-refs lists dead check refs for ADR-0010/R1 and INV-001..INV-005; expected while the
+      owning cards are not done, a model finding only if they remain dead after them.
+    suggestion: "No action on this card."
+    confidence: high
+    source: model
+    status: open
+
+minor_triage:
+  sampled: 2
+  total: 6
+  items:
+    - finding: "Non-canonical paths get an undeclared 307 text/html redirect; property test masks it"
+      should_gate: false
+      rationale: "Only clients sending non-canonical paths see it and a redirect is not a failure response; contract hygiene, not a correctness break."
+    - finding: "ADR-0004 24:00 rule stated only by pattern, prose incomplete and untested"
+      should_gate: false
+      rationale: "The machine-readable patterns already encode the revised ADR-0004 exactly; the gap is prose and a pinning test, non-blocking."

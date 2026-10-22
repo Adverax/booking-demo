@@ -1,0 +1,189 @@
+version: 1
+generated_at: "2026-10-21T23:31:47Z"
+target: "card/002-sqlite-store-migrations (main 5fdd66b...HEAD e866099)"
+overall_score: 9.0
+risk_level: low
+review_lane: fast
+reviewer: forge:review
+reviewer_version: "2026.10.10"
+model: "claude-opus-5-5"
+
+task_contract_verdict: pass
+system_contract_verdict: pass
+overall_verdict: pass
+
+security: applicable (0 findings)
+
+coverage:
+  read:
+    - "internal/store/ production files in full (store.go, migrate.go, epoch.go, migrations/0001_create_resource_and_booking.sql)"
+    - "internal/store/README.md, internal/store/migrations/README.md"
+    - "internal/store/store_test.go (lines 1-140), epoch_test.go and schema_test.go seeding sections, migrate_test.go user_version cases"
+    - "go.mod diff"
+    - "meta/kanban/cards/CARD-002.md (task contract, system contract, guardrails, worktree notes)"
+    - "cycle-1 report meta/review/20261021T174859Z-CARD-002-cycle1.yml"
+    - "impact set meta/impact/impact-set-5fdd66b02758-e86609959341-worktree.json (computed for this range)"
+  not_reached:
+    - "go.sum content (hash list, not reviewed line by line)"
+    - "remaining bodies of schema_test.go, txlock_test.go, migrate_test.go beyond the sampled sections (patch-identical to cycle 1, where they were read in full)"
+  confidence: high
+  commands:
+    - "go build ./... ok; go vet ./... ok; go test -count=1 ./... ok (internal/store 0.9s)"
+    - "grep time.Now / COLLATE / NOCASE in non-test internal/store: 0 hits"
+    - "grep time.Sleep / t.Parallel in internal/store/*_test.go: 0 hits"
+    - "grep importers of internal/store outside the package: 0"
+metrics:
+  diff: { files: 13, added: 1223, removed: 1 }
+  max_fan_in: { symbol: "store.Open", callers: 0, note: "29 reference lines, all inside internal/store tests or meta/ docs; no production caller yet" }
+  tests_cover_change: true
+  hotspots: []
+  cochange_missing: []
+  unmeasured:
+    max_fan_in: "no_eligible_fact — new library package; Open/IsUniqueViolation/ErrSchemaTooNew have no production callers (CARD-003/CARD-004 consume them); epoch.go no_exported_symbols; the .sql file no_symbol_extractor"
+    reverse_deps: "no_eligible_fact — impact_set underivable: manifest_changed (go.mod changed) for internal/store; no_recipe for internal/store/migrations"
+    cochange_missing: "no_eligible_fact — every touched code file is new (1 commit each); only meta/kanban co-change pairs exist"
+    hotspots: "no_eligible_fact — all touched files have churn 1 (go.mod 2), defect density 0"
+
+system_contract:
+  rules_checked: 11
+  holds: 3
+  unchecked: 8
+  violated: 0
+  verdicts:
+    - "ADR-0010/R1 ⚠ unchecked — check_ref_missing: TestBooking_CannotReactivate; manual read: migration 0001 carries no cancelled-to-active guard, owned by CARD-004 as migration 0002"
+    - "ADR-0012/R1 ⚠ unchecked — no_eligible_fact: no booking write path in this diff; the only transaction is the migration runner's BEGIN IMMEDIATE (migrate.go:83)"
+    - "ADR-0013/R1 ✓ holds — booking.slot_start INTEGER in a STRICT table (0001:31-36); toEpoch/fromEpoch (epoch.go); TestPropertyTest_Store_InstantsRoundTripAsEpochSeconds passes at e866099; grep time\\.Now in non-test internal/store = 0 hits"
+    - "ADR-0015/R1 ✓ holds — grep COLLATE/NOCASE in non-test internal/store = 0 hits (default BINARY); active-slot index on (resource_id, slot_start) only (0001:38-40); TestSchema_KeysAndNamesCompareByteForByte passes at e866099"
+    - "CON-007 ⚠ unchecked — no_eligible_fact: no booking write path in this diff"
+    - "CON-008 ✓ holds — storage half: instants are INTEGER epoch seconds (epoch.go, 0001:31); no clock read and no RFC 3339 conversion in non-test code (grep time\\.Now = 0 hits)"
+    - "INV-001 ⚠ unchecked — check_ref_missing: TestBookSlot_RejectsAlreadyBookedSlot et al.; manual read: partial unique index booking_active_slot_uq (0001:38-40), TestPropertySchema_ActiveSlotAndKeyStayUnique passes, no violation found"
+    - "INV-002 ⚠ unchecked — no_eligible_fact: past-slot and working-hours acceptance is domain code of later cards; nothing in this diff accepts bookings"
+    - "INV-003 ⚠ unchecked — check_ref_missing: TestBookSlot_Repeat* et al.; manual read: booking_idempotency_key_uq across all statuses (0001:42-44), TestSchema_IdempotencyKeyIsUniqueAcrossAllBookings passes, no violation found"
+    - "INV-004 ⚠ unchecked — check_ref_missing: TestSchema_RejectsCancelledToActiveTransition, TestBooking_CannotReactivate; schema guard deferred to CARD-004 migration 0002"
+    - "INV-005 ⚠ unchecked — check_ref_missing: TestCreateResource_RejectsEmptyName et al.; manual read: PK (resource_id, weekday) and half-hour/single-day CHECKs (0001:15-22) match ADR-0004, TestSchema_WorkingHoursHaveTheADR0004Shape passes"
+
+guardrails:
+  - "G-1 ✓ holds — git diff --name-only main...HEAD lists no api/openapi.yaml and no internal/httpapi/** path (13 files, all go.mod/go.sum/internal/store/**)"
+
+root_causes: []
+
+findings:
+  - id: F-006
+    severity: low
+    category: tech-debt
+    type: risk
+    file: internal/store/migrate.go
+    line: 97
+    title: "F-006 Negative user_version panics Open instead of returning an error"
+    description: |
+      PRAGMA user_version is a signed 32-bit integer. A database file whose user_version is
+      negative (set by hand or by a foreign tool) passes the `current > len(ms)` guard at
+      migrate.go:94 and reaches `ms[current:]` at migrate.go:97, a slice-bounds runtime panic.
+      Open then crashes the process rather than returning an error and closing the pool
+      (failure matrix promises an error on any failure). New in cycle 2 (not raised in cycle 1);
+      code is patch-identical to cycle 1.
+    suggestion: |
+      Guard `current < 0` alongside the too-new check (return an error naming the version), and
+      add a case to migrate_test.go next to TestMigrate_RejectsDatabaseNewerThanBinary.
+    confidence: high
+    source: static
+    violates: null
+    root_cause: null
+    status: open
+    fixed_in: null
+    dismissed_reason: null
+    learned_pattern: null
+  - id: F-001
+    severity: low
+    category: tech-debt
+    type: risk
+    file: internal/store/store.go
+    line: 85
+    title: "F-001 file: URI misroutes a path beginning with two slashes"
+    description: |
+      Re-raised from cycle 1 (unchanged). dsn() builds "file:" + escapePath(path); a POSIX path
+      beginning with "//" becomes "file://host/..." and SQLite reads the first segment as the
+      URI authority and refuses the open. Fails loudly, never opens a wrong file. Operator-config
+      input only.
+    suggestion: |
+      Emit "file://" + escapePath(path) for absolute paths (empty authority), or filepath.Clean
+      first; add the case to TestOpen_PathWithURISpecialCharacters.
+    confidence: medium
+    source: static
+    violates: null
+    root_cause: null
+    status: open
+    fixed_in: null
+    dismissed_reason: null
+    learned_pattern: null
+  - id: F-002
+    severity: low
+    category: tech-debt
+    type: gap
+    file: internal/store/store.go
+    line: 100
+    title: "F-002 Declared rows F3 and F2 have no covering test"
+    description: |
+      Re-raised from cycle 1 (unchanged). checkJournalMode's rejection branch (failure-matrix F3)
+      is never exercised, and no test asserts F2's pool closure on a failing Open;
+      TestOpen_FailsWhenDirectoryDoesNotExist only asserts err != nil.
+    suggestion: |
+      Open(ctx, ":memory:") yields journal_mode "memory" and must fail with "want wal"; assert it.
+    confidence: high
+    source: static
+    violates: null
+    root_cause: null
+    status: open
+    fixed_in: null
+    dismissed_reason: null
+    learned_pattern: null
+  - id: F-003
+    severity: info
+    category: tech-debt
+    type: gap
+    file: internal/store/migrations/0001_create_resource_and_booking.sql
+    line: 27
+    title: "F-003 [out-of-scope] ADR-0010 schema guard not yet present"
+    description: "No cancelled-to-active trigger at this head; owned by CARD-004 (migration 0002). Re-noted from cycle 1, not counted."
+    suggestion: "Track in CARD-004."
+    confidence: high
+    source: model
+    violates: null
+    status: open
+  - id: F-004
+    severity: info
+    category: tech-debt
+    type: gap
+    file: meta/architecture/decisions/adr/0006-sqlite-driver-modernc.md
+    line: null
+    title: "F-004 [out-of-scope] ADR-0006 claims no _txlock option; v1.61.0 has one"
+    description: "TestDriver_TxLockImmediateTakesTheWriteLockAtBegin shows the option exists on the pinned driver. Model maintenance, re-noted from cycle 1, not counted."
+    suggestion: "Revise ADR-0006 via forge:architect."
+    confidence: high
+    source: model
+    violates: null
+    status: open
+  - id: F-005
+    severity: info
+    category: tech-debt
+    type: question
+    file: internal/store/epoch_test.go
+    line: 28
+    title: "F-005 [out-of-scope] EC test ref name differs from the Go function name"
+    description: "EC names PropertyTest_Store_InstantsRoundTripAsEpochSeconds; the Go function carries the Test prefix. Re-noted from cycle 1, not counted."
+    suggestion: "Align the model's test ref with the Go name."
+    confidence: medium
+    source: model
+    violates: null
+    status: open
+
+minor_triage:
+  sampled: 2
+  total: 3
+  items:
+    - finding: "F-006 Negative user_version panics Open instead of returning an error"
+      should_gate: false
+      rationale: "Needs a hand-corrupted or foreign database file and still fails loudly at startup; a one-line guard is hardening, not a merge blocker."
+    - finding: "F-001 file: URI misroutes a path beginning with two slashes"
+      should_gate: false
+      rationale: "Operator-config edge case that fails loudly at startup rather than opening a wrong file; non-blocking."
