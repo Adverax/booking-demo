@@ -233,7 +233,7 @@ func TestBooking_CannotReactivate(t *testing.T) {
 	if rec := e.cancel(b1.Id); rec.Code != http.StatusOK {
 		t.Fatalf("cancel: %d %s", rec.Code, rec.Body)
 	}
-	svc := booking.NewService(e.store, func() time.Time { return fixedNow })
+	svc := booking.NewService(e.store, catalog.New(e.store), func() time.Time { return fixedNow })
 
 	// Domain guard.
 	stored, err := svc.Get(context.Background(), b1.Id)

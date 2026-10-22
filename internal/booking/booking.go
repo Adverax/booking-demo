@@ -6,6 +6,10 @@
 // insert is the check, and the store's unique indexes decide the winner (ADR-0008, ADR-0012). A
 // rejected insert is classified afterwards from what is stored under the request's idempotency
 // key (insert-then-classify, ADR-0011): replay, key conflict or taken slot.
+//
+// Before the insert a request is validated (FR-005, INV-002): its shape, its resource and working
+// hours read through the Resource Catalog (COMP-002), and the not-in-the-past rule against the
+// injected clock. A past-slot rejection alone looks the key up first (ADR-0020).
 package booking
 
 import (
@@ -14,6 +18,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/adverax/booking-demo/internal/catalog"
 )
 
 // SlotLength is the fixed length of every slot; slots start on the UTC half hour (FR-003).
@@ -91,9 +97,21 @@ var ErrSlotTaken = errors.New("booking: slot taken")
 // nothing was stored or changed.
 var ErrKeyConflict = errors.New("booking: idempotency key already used with a different payload")
 
-// ErrInvalidRequest is wrapped by every rejection of a request before anything is stored, with the
-// reason after it (ADR-0018).
+// ErrInvalidRequest is wrapped by every rejection of a request for its shape alone (an empty key or
+// customer name, a slot start not on the UTC half hour), before any statement, with the reason
+// after it (ADR-0018).
 var ErrInvalidRequest = errors.New("booking: invalid request")
+
+// ErrUnknownResource means no resource has the request's resource id; nothing was stored.
+var ErrUnknownResource = errors.New("booking: unknown resource")
+
+// ErrOutsideWorkingHours means the slot is not inside the resource's working hours (INV-002,
+// ADR-0004); nothing was stored.
+var ErrOutsideWorkingHours = errors.New("booking: slot outside the resource's working hours")
+
+// ErrSlotInPast means the slot starts before the current time and no booking is stored under the
+// request's key (INV-002, ADR-0016, ADR-0020); nothing was stored.
+var ErrSlotInPast = errors.New("booking: slot is in the past")
 
 // ErrNotUnique is what a Repository returns when the insert was rejected by a uniqueness rule of
 // the store: the active-slot rule or the idempotency-key rule (ADR-0008). Which one is not said.
@@ -125,36 +143,54 @@ type Repository interface {
 	GetBookingByIdempotencyKey(ctx context.Context, key string) (Booking, error)
 }
 
+// Resources is the port of this component to the Resource Catalog (COMP-002): the only way booking
+// reads a resource's working hours (ASM-0007, DEC-015 open). *catalog.Catalog implements it.
+type Resources interface {
+	// Get returns the resource with the given id, or an error wrapping catalog.ErrNotFound.
+	Get(ctx context.Context, id string) (catalog.Resource, error)
+}
+
 // Service books slots.
 type Service struct {
-	repo Repository
-	now  func() time.Time
+	repo      Repository
+	resources Resources
+	now       func() time.Time
 }
 
-// NewService returns a Service storing through repo. now is the only source of the current time
-// for booking logic (ADR-0013); the bootstrap passes time.Now, tests pass a fixed clock. This card
-// adds no rule that consults it: the past-slot rule that does is CARD-007's.
-func NewService(repo Repository, now func() time.Time) *Service {
-	return &Service{repo: repo, now: now}
+// NewService returns a Service storing through repo and reading working hours through resources.
+// now is the only source of the current time for booking logic (ADR-0013); the bootstrap passes
+// time.Now, tests pass a fixed or movable clock.
+func NewService(repo Repository, resources Resources, now func() time.Time) *Service {
+	return &Service{repo: repo, resources: resources, now: now}
 }
 
-// Book books the slot containing req.SlotStart, normalised to its canonical start, for
-// req.CustomerName under req.IdempotencyKey (FR-005, FR-006, INV-003).
+// Book books the slot of req.ResourceID starting at req.SlotStart for req.CustomerName under
+// req.IdempotencyKey (FR-005, FR-006, INV-002, INV-003).
 //
-// An empty idempotency key is rejected before any statement, wrapping ErrInvalidRequest
-// (ADR-0018). Otherwise the booking is inserted first, with no read before it (ADR-0011,
-// ADR-0020 rejects a lookup on this path). Only when the store rejects the insert as not unique is
-// the booking stored under the key read, in a separate autocommit statement (ADR-0012), and the
-// outcome decided from it, never from which index fired:
-//   - a booking with the same payload (Booking.SamePayload): that booking in its current state,
-//     cancelled included (ADR-0002), with replayed = true; nothing new is stored;
-//   - a booking with a different payload: ErrKeyConflict (ADR-0001);
-//   - no booking under the key: ErrSlotTaken; nothing is stored under the key.
+// The order is validate, insert, classify (ADR-0011, ADR-0020). Validation runs in this order and
+// stops at the first rejection:
+//  1. input shape, with no statement and no key lookup: an empty idempotency key, an empty customer
+//     name, or a slot start not on the UTC half hour wraps ErrInvalidRequest (ADR-0018, AC-017);
+//  2. the resource, read through the Resources port: an unknown id wraps ErrUnknownResource;
+//  3. its working hours: a slot not inside the interval of its UTC weekday is
+//     ErrOutsideWorkingHours (ADR-0004);
+//  4. the past check, last: a slot whose start is earlier than the injected clock's now, compared
+//     as integer UTC epoch seconds, is in the past (ADR-0016, ADR-0013). Only this rejection looks
+//     the key up, with one autocommit read, before answering (ADR-0020): see resolveStoredKey,
+//     with ErrSlotInPast when nothing is stored under the key.
+//
+// Shape errors come first and never consult the key because ADR-0020 confines the lookup to "when
+// validation rejects a request because its slot is in the past"; a request that is malformed, names
+// no resource or lies outside working hours is answered as such whatever its key.
+//
+// A valid request is inserted first, with no read before it (ADR-0011; ADR-0020 rejects a lookup on
+// this path). Only when the store rejects the insert as not unique is the key read and the outcome
+// decided by resolveStoredKey, with ErrSlotTaken when nothing is stored under the key.
 //
 // A new booking is returned with replayed = false.
 func (s *Service) Book(ctx context.Context, req Request) (b Booking, replayed bool, err error) {
-	if req.IdempotencyKey == "" {
-		return Booking{}, false, fmt.Errorf("%w: idempotency key is required", ErrInvalidRequest)
+	if err := validateShape(req); err != nil {
+		return Booking{}, false, err
 	}
 	b = Booking{
 		ID:             rand.Text(),
@@ -164,6 +200,19 @@ func (s *Service) Book(ctx context.Context, req Request) (b Booking, replayed bo
 		IdempotencyKey: req.IdempotencyKey,
 		Status:         StatusActive,
 	}
+	r, err := s.resources.Get(ctx, req.ResourceID)
+	switch {
+	case errors.Is(err, catalog.ErrNotFound):
+		return Booking{}, false, fmt.Errorf("%w: %w", ErrUnknownResource, err)
+	case err != nil:
+		return Booking{}, false, fmt.Errorf("booking: read resource: %w", err)
+	}
+	if !insideWorkingHours(r.WeeklyHours, b.SlotStart) {
+		return Booking{}, false, ErrOutsideWorkingHours
+	}
+	if inPast(b.SlotStart, s.now()) {
+		return s.resolveStoredKey(ctx, b, ErrSlotInPast)
+	}
 	err = s.repo.InsertBooking(ctx, b)
 	if err == nil {
 		return b, false, nil
@@ -171,18 +220,61 @@ func (s *Service) Book(ctx context.Context, req Request) (b Booking, replayed bo
 	if !errors.Is(err, ErrNotUnique) {
 		return Booking{}, false, fmt.Errorf("booking: insert: %w", err)
 	}
-	return s.classify(ctx, b)
+	return s.resolveStoredKey(ctx, b, ErrSlotTaken)
 }
 
-// classify decides the outcome of a request whose insert was rejected as not unique, from the
-// booking stored under its key (ADR-0011).
-func (s *Service) classify(ctx context.Context, want Booking) (Booking, bool, error) {
+// validateShape rejects a request whose shape alone is wrong, before any statement (ADR-0018,
+// AC-017, AC-052, AC-053). Strings are checked as received: nothing is trimmed (ADR-0015).
+func validateShape(req Request) error {
+	switch {
+	case req.IdempotencyKey == "":
+		return fmt.Errorf("%w: idempotency key is required", ErrInvalidRequest)
+	case req.CustomerName == "":
+		return fmt.Errorf("%w: customer name is required", ErrInvalidRequest)
+	case !CanonicalSlotStart(req.SlotStart).Equal(req.SlotStart):
+		return fmt.Errorf("%w: slot start %s is not on the UTC half hour", ErrInvalidRequest, req.SlotStart.Format(time.RFC3339Nano))
+	}
+	return nil
+}
+
+// insideWorkingHours reports whether the slot starting at start (canonical, UTC) lies inside the
+// working interval of its UTC weekday. It applies the catalog's reading of an Interval: half-open
+// [Start, End) in minutes since 00:00 UTC, End = catalog.EndOfDay being the end of that UTC day
+// (ADR-0004); a weekday without an interval is closed. An aligned interval inside one day holds a
+// slot exactly when the slot's start is at or after Start and its end at or before End.
+func insideWorkingHours(hours []catalog.Interval, start time.Time) bool {
+	start = start.UTC()
+	m := start.Hour()*60 + start.Minute()
+	for _, iv := range hours {
+		if iv.Weekday == start.Weekday() {
+			return iv.Start <= m && m+int(SlotLength/time.Minute) <= iv.End
+		}
+	}
+	return false
+}
+
+// inPast reports whether a slot starting at start is in the past at now: its start is earlier than
+// now, compared as integer UTC epoch seconds (ADR-0016, ADR-0013). A start equal to now is not in
+// the past; now's sub-second part does not count.
+func inPast(start, now time.Time) bool {
+	return start.Unix() < now.Unix()
+}
+
+// resolveStoredKey decides the outcome of a request that cannot be stored as a new booking, from the
+// booking stored under its key, read with one autocommit statement (ADR-0011, ADR-0012). It is the
+// one place a repeated key is judged, for a rejected insert and for a past slot alike (ADR-0020):
+//   - a booking with the same payload (Booking.SamePayload): that booking in its current state,
+//     cancelled included (ADR-0002), with replayed = true; nothing new is stored;
+//   - a booking with a different payload: ErrKeyConflict (ADR-0001);
+//   - no booking under the key: absent (ErrSlotTaken after a rejected insert, ErrSlotInPast for a
+//     past slot); nothing is stored under the key.
+func (s *Service) resolveStoredKey(ctx context.Context, want Booking, absent error) (Booking, bool, error) {
 	stored, err := s.repo.GetBookingByIdempotencyKey(ctx, want.IdempotencyKey)
 	switch {
 	case errors.Is(err, ErrNotFound):
-		return Booking{}, false, ErrSlotTaken
+		return Booking{}, false, absent
 	case err != nil:
-		return Booking{}, false, fmt.Errorf("booking: classify a rejected insert: %w", err)
+		return Booking{}, false, fmt.Errorf("booking: read the booking stored under the key: %w", err)
 	case !stored.SamePayload(want):
 		return Booking{}, false, ErrKeyConflict
 	}
