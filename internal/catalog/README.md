@@ -2,21 +2,24 @@
 
 ## Purpose
 
-The Resource Catalog component (COMP-002): the Resource aggregate (AGG-001) with its weekly working hours (ADR-0004), and its creation (FR-001).
+The Resource Catalog component (COMP-002): the Resource aggregate (AGG-001) with its weekly working hours (ADR-0004), its validated creation (FR-001) and its list and read by id (FR-002). It is the single owner of the working-hours rules (ASM-0007).
 
 ## Architecture
 
-- `Catalog.Create` assigns an opaque id and stores the resource with its working hours through the `Repository` port, all or nothing.
+- `NewResource` is the aggregate constructor and the one place INV-005 is enforced: a non-empty name, at least one interval, at most one interval per weekday, both bounds on the half hour, `0 <= Start < End <= 1440` (24:00 is allowed only as an end, so an interval never crosses midnight UTC). Every violation wraps `ErrInvalidResource`; accepted hours are copied and ordered by weekday.
+- `Catalog.Create` validates through `NewResource` before anything reaches the store, then stores the resource with its working hours through the `Repository` port, all or nothing. `Catalog.List` and `Catalog.Get` read through the same port; `Get` of an unknown id wraps `ErrNotFound`.
 - Working hours are one `Interval` per weekday, bounds in minutes since 00:00 UTC, half-open; an end of 1440 is the end of the UTC day.
-- This is the minimal creation path of the walking skeleton. The working-hours rules of INV-005 are not validated here yet (CARD-006); until then the schema's constraints are the only backstop.
+- The schema's CHECK constraints stay a backstop only; the validation answers first with a stable error.
 
 ## Key entities
 
 | Name | Kind | Description | File |
 |------|------|-------------|------|
 | `Resource` | type | Name and weekly working hours | [`catalog.go`](./catalog.go) |
+| `NewResource` | func | Builds a valid Resource or fails with `ErrInvalidResource` (INV-005) | [`catalog.go`](./catalog.go) |
 | `Interval` | type | Working interval of one weekday, in minutes UTC | [`catalog.go`](./catalog.go) |
-| `Catalog` | type | Creates resources (`Create`) | [`catalog.go`](./catalog.go) |
+| `Catalog` | type | Creates (`Create`), lists (`List`) and reads (`Get`) resources | [`catalog.go`](./catalog.go) |
+| `ErrInvalidResource` / `ErrNotFound` | var | Rejected input; unknown resource id | [`catalog.go`](./catalog.go) |
 | `Repository` | interface | Port to the store | [`catalog.go`](./catalog.go) |
 
 ## Usage

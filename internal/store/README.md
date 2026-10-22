@@ -12,7 +12,7 @@ The SQLite store of the booking service (COMP-005) and the runner of its embedde
 - A database whose `user_version` is newer than the binary's newest migration is refused with `ErrSchemaTooNew`.
 - Every instant is stored as integer UTC epoch seconds and converted only through `toEpoch` / `fromEpoch` (ADR-0013).
 - The package defines no repository interfaces; consuming components own their ports and the store implements them ([`repository.go`](./repository.go)).
-- `InsertBooking` is one autocommit `INSERT` with no read before it (ADR-0012); a rejection by either unique index is returned as `booking.ErrNotUnique`, without saying which index fired. `InsertResource` writes the resource and its working hours in one write-only transaction.
+- `InsertBooking` is one autocommit `INSERT` with no read before it (ADR-0012); a rejection by either unique index is returned as `booking.ErrNotUnique`, without saying which index fired. `InsertResource` writes the resource and its working hours in one write-only transaction. `ListResources` and `GetResource` are single `SELECT`s joining the resource and its working hours (resources in creation order, intervals by weekday); an unknown id is `catalog.ErrNotFound`.
 
 ## Key entities
 
@@ -21,6 +21,7 @@ The SQLite store of the booking service (COMP-005) and the runner of its embedde
 | `Open` | func | Opens (creating if needed) and migrates the database at a path | [`store.go`](./store.go) |
 | `Store` | type | Handle over the migrated `*sql.DB`; `Close` shuts it down | [`store.go`](./store.go) |
 | `InsertBooking` / `InsertResource` | method | Adapters of `booking.Repository` and `catalog.Repository` | [`repository.go`](./repository.go) |
+| `ListResources` / `GetResource` | method | Read side of `catalog.Repository` | [`repository.go`](./repository.go) |
 | `IsUniqueViolation` | func | Reports a unique-index rejection (active slot or idempotency key) | [`store.go`](./store.go) |
 | `ErrSchemaTooNew` | var | Database schema is newer than this binary | [`migrate.go`](./migrate.go) |
 | `toEpoch` / `fromEpoch` | func | The only conversions of instants into and out of SQL | [`epoch.go`](./epoch.go) |
