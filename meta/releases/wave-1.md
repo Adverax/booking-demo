@@ -19,3 +19,6 @@
 
 ## Smoke test
 - 2026-10-22, on main 51ee8b2: `go build ./... && go test ./...` PASS (2s); `make build test vet` PASS.
+
+## Metrics snapshot
+- `capture.py --wave 1` exit 2, REFUSED: "the signal definitions registry is missing: meta/metrics/signal-definitions.yml" (ADR-0032). Unfixable inside the kanban station (the registry is owned by forge:metrics); no snapshot was written for this wave.
