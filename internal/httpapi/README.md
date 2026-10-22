@@ -15,7 +15,7 @@ The HTTP API of the booking service (COMP-001). The types and the `net/http` ser
   - a body that is not exactly one JSON value, or a parameter that cannot be bound, goes to 400 `validation_error`;
   - a handler error or panic goes to 500 `internal_error`, and the error text is not returned.
 - Schema keywords such as `minLength`, `pattern` and `enum` are declarative contract. There is no runtime schema validator, and kin-openapi is used only in tests. The domain cards enforce those rules and answer `validation_error`.
-- The plumbing (`server.go`) depends only on the generated code and `github.com/oapi-codegen/runtime`. The handlers (`Server`) import the domain packages `internal/catalog` and `internal/booking` and translate between the generated types and the domain: instants are converted to and from RFC 3339 UTC here only (CON-008), and domain errors become the contract's codes (`booking.ErrSlotTaken` is 409 `slot_taken`). The package never imports the store.
+- The plumbing (`server.go`) depends only on the generated code and `github.com/oapi-codegen/runtime`. The handlers (`Server`) import the domain packages `internal/catalog` and `internal/booking` and translate between the generated types and the domain: instants are converted to and from RFC 3339 UTC here only (CON-008), and domain errors become the contract's codes (`booking.ErrSlotTaken` is 409 `slot_taken`, `booking.ErrKeyConflict` is 409 `idempotency_key_conflict`, `booking.ErrInvalidRequest` is 400 `validation_error`; a replayed booking is 200, a new one 201). The package never imports the store.
 
 ## Key entities
 

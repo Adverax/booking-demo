@@ -7,21 +7,31 @@ import (
 	"github.com/adverax/booking-demo/internal/booking"
 )
 
-// BookSlot books one slot (FR-005): 201 with the new booking, or 409 slot_taken when the store's
-// unique index rejected the insert (AC-018, ADR-0008). Instants cross this boundary as RFC 3339
-// and are converted to and from the domain's time.Time here only (CON-008).
+// BookSlot books one slot (FR-005, FR-006): 201 with the new booking; 200 with the original
+// booking in its current state when the key is replayed with the same payload (ADR-0002, ADR-0011);
+// 409 idempotency_key_conflict when the key is stored with another payload (ADR-0001); 409
+// slot_taken when the slot has an active booking under another key (AC-018, ADR-0008); 400
+// validation_error for a request rejected before anything is stored, such as an empty key
+// (ADR-0018). Instants cross this boundary as RFC 3339 and are converted to and from the domain's
+// time.Time here only (CON-008).
 func (s *Server) BookSlot(ctx context.Context, req BookSlotRequestObject) (BookSlotResponseObject, error) {
-	b, err := s.bookings.Book(ctx, booking.Request{
+	b, replayed, err := s.bookings.Book(ctx, booking.Request{
 		ResourceID:     req.Body.ResourceId,
 		SlotStart:      req.Body.SlotStart,
 		CustomerName:   req.Body.CustomerName,
 		IdempotencyKey: req.Body.IdempotencyKey,
 	})
-	if errors.Is(err, booking.ErrSlotTaken) {
+	switch {
+	case errors.Is(err, booking.ErrInvalidRequest):
+		return BookSlot400JSONResponse{ValidationErrorJSONResponse{Code: ErrorCodeValidationError, Message: err.Error()}}, nil
+	case errors.Is(err, booking.ErrKeyConflict):
+		return BookSlot409JSONResponse{Code: ErrorCodeIdempotencyKeyConflict, Message: "the idempotency key is already used with a different payload"}, nil
+	case errors.Is(err, booking.ErrSlotTaken):
 		return BookSlot409JSONResponse{Code: ErrorCodeSlotTaken, Message: "the slot already has an active booking"}, nil
-	}
-	if err != nil {
+	case err != nil:
 		return nil, err
+	case replayed:
+		return BookSlot200JSONResponse(bookingToAPI(b)), nil
 	}
 	return BookSlot201JSONResponse(bookingToAPI(b)), nil
 }

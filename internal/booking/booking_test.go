@@ -30,17 +30,38 @@ func TestCanonicalSlotStart(t *testing.T) {
 	}
 }
 
+// fakeRepo answers from saved. err fails every operation; insertErr fails InsertBooking only,
+// which is how a uniqueness rejection followed by a classifying read is faked. inserts counts the
+// InsertBooking calls.
 type fakeRepo struct {
-	err   error
-	saved []Booking
+	err       error
+	insertErr error
+	saved     []Booking
+	inserts   int
 }
 
 func (r *fakeRepo) InsertBooking(_ context.Context, b Booking) error {
+	r.inserts++
 	if r.err != nil {
 		return r.err
 	}
+	if r.insertErr != nil {
+		return r.insertErr
+	}
 	r.saved = append(r.saved, b)
 	return nil
+}
+
+func (r *fakeRepo) GetBookingByIdempotencyKey(_ context.Context, key string) (Booking, error) {
+	if r.err != nil {
+		return Booking{}, r.err
+	}
+	for _, b := range r.saved {
+		if b.IdempotencyKey == key {
+			return b, nil
+		}
+	}
+	return Booking{}, ErrNotFound
 }
 
 // UpdateBookingStatus and GetBooking answer from the saved bookings; the schema's guard is not
@@ -77,9 +98,9 @@ func TestService_BookStoresAnActiveBookingAtTheCanonicalStart(t *testing.T) {
 	s := NewService(repo, clock)
 	req := Request{ResourceID: "r1", SlotStart: time.Date(2026, 11, 2, 9, 10, 0, 0, time.UTC), CustomerName: " Ann ", IdempotencyKey: "K-1 "}
 
-	b, err := s.Book(context.Background(), req)
-	if err != nil {
-		t.Fatal(err)
+	b, replayed, err := s.Book(context.Background(), req)
+	if err != nil || replayed {
+		t.Fatalf("Book: replayed %v, err %v", replayed, err)
 	}
 	want := Booking{ID: b.ID, ResourceID: "r1", SlotStart: time.Date(2026, 11, 2, 9, 0, 0, 0, time.UTC),
 		CustomerName: " Ann ", IdempotencyKey: "K-1 ", Status: StatusActive}
@@ -89,15 +110,17 @@ func TestService_BookStoresAnActiveBookingAtTheCanonicalStart(t *testing.T) {
 	if !b.SlotEnd().Equal(want.SlotStart.Add(30 * time.Minute)) {
 		t.Errorf("SlotEnd = %v", b.SlotEnd())
 	}
-	b2, _ := s.Book(context.Background(), req)
+	req.IdempotencyKey = "K-2"
+	b2, _, _ := s.Book(context.Background(), req)
 	if b2.ID == b.ID {
 		t.Error("two bookings got the same id")
 	}
 }
 
+// A uniqueness rejection with nothing stored under the request's key is a taken slot.
 func TestService_BookMapsAUniquenessRejectionToSlotTaken(t *testing.T) {
-	s := NewService(&fakeRepo{err: fmt.Errorf("store: %w", ErrNotUnique)}, clock)
-	_, err := s.Book(context.Background(), Request{ResourceID: "r1", SlotStart: clock().Add(time.Hour)})
+	s := NewService(&fakeRepo{insertErr: fmt.Errorf("store: %w", ErrNotUnique)}, clock)
+	_, _, err := s.Book(context.Background(), Request{ResourceID: "r1", SlotStart: clock().Add(time.Hour), IdempotencyKey: "k"})
 	if !errors.Is(err, ErrSlotTaken) {
 		t.Fatalf("err = %v, want ErrSlotTaken", err)
 	}
@@ -106,9 +129,74 @@ func TestService_BookMapsAUniquenessRejectionToSlotTaken(t *testing.T) {
 func TestService_BookPassesOtherStoreErrorsThrough(t *testing.T) {
 	boom := errors.New("disk I/O error")
 	s := NewService(&fakeRepo{err: boom}, clock)
-	_, err := s.Book(context.Background(), Request{ResourceID: "r1", SlotStart: clock().Add(time.Hour)})
+	_, _, err := s.Book(context.Background(), Request{ResourceID: "r1", SlotStart: clock().Add(time.Hour), IdempotencyKey: "k"})
 	if !errors.Is(err, boom) || errors.Is(err, ErrSlotTaken) {
 		t.Fatalf("err = %v, want the store error and not ErrSlotTaken", err)
+	}
+}
+
+// The classifier (ADR-0011): after a uniqueness rejection the booking stored under the key decides
+// the outcome, whatever index fired.
+func TestService_BookClassifiesARejectedInsertFromTheStoredKey(t *testing.T) {
+	start := time.Date(2026, 11, 2, 9, 0, 0, 0, time.UTC)
+	stored := Booking{ID: "b1", ResourceID: "r1", SlotStart: start, CustomerName: "Ann", IdempotencyKey: "K1", Status: StatusCancelled}
+	notUnique := fmt.Errorf("store: %w", ErrNotUnique)
+	for _, c := range []struct {
+		name         string
+		req          Request
+		wantReplayed bool
+		wantErr      error
+	}{
+		{"same payload, non-canonical spelling of the slot", Request{"r1", start.Add(17 * time.Minute).In(time.FixedZone("+02", 7200)), "Ann", "K1"}, true, nil},
+		{"other name", Request{"r1", start, "Bob", "K1"}, false, ErrKeyConflict},
+		{"name differs by case", Request{"r1", start, "ann", "K1"}, false, ErrKeyConflict},
+		{"name differs by a trailing space", Request{"r1", start, "Ann ", "K1"}, false, ErrKeyConflict},
+		{"other slot", Request{"r1", start.Add(SlotLength), "Ann", "K1"}, false, ErrKeyConflict},
+		{"other resource", Request{"r2", start, "Ann", "K1"}, false, ErrKeyConflict},
+		{"no booking under the key", Request{"r1", start, "Ann", "K2"}, false, ErrSlotTaken},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			repo := &fakeRepo{insertErr: notUnique, saved: []Booking{stored}}
+			b, replayed, err := NewService(repo, clock).Book(context.Background(), c.req)
+			if !errors.Is(err, c.wantErr) || replayed != c.wantReplayed {
+				t.Fatalf("Book = %+v, replayed %v, err %v; want replayed %v, err %v", b, replayed, err, c.wantReplayed, c.wantErr)
+			}
+			if c.wantReplayed && b != stored {
+				t.Fatalf("replay returned %+v, want the stored booking %+v in its current state", b, stored)
+			}
+			if !c.wantReplayed && b != (Booking{}) {
+				t.Fatalf("rejected request returned %+v", b)
+			}
+		})
+	}
+}
+
+// A failure of the classifying read is passed through and is not mistaken for any outcome.
+func TestService_BookPassesAClassifyingReadErrorThrough(t *testing.T) {
+	boom := errors.New("disk I/O error")
+	repo := &failingReadRepo{fakeRepo: fakeRepo{insertErr: fmt.Errorf("store: %w", ErrNotUnique)}, readErr: boom}
+	_, replayed, err := NewService(repo, clock).Book(context.Background(), Request{ResourceID: "r1", SlotStart: clock(), CustomerName: "Ann", IdempotencyKey: "K1"})
+	if !errors.Is(err, boom) || errors.Is(err, ErrSlotTaken) || errors.Is(err, ErrKeyConflict) || replayed {
+		t.Fatalf("replayed %v, err %v; want the read error only", replayed, err)
+	}
+}
+
+type failingReadRepo struct {
+	fakeRepo
+	readErr error
+}
+
+func (r *failingReadRepo) GetBookingByIdempotencyKey(context.Context, string) (Booking, error) {
+	return Booking{}, r.readErr
+}
+
+// ADR-0018, AC-053: an empty key is rejected before any statement, so it never reaches the
+// classifier.
+func TestService_BookRejectsAnEmptyKeyBeforeInserting(t *testing.T) {
+	repo := &fakeRepo{}
+	_, _, err := NewService(repo, clock).Book(context.Background(), Request{ResourceID: "r1", SlotStart: clock(), CustomerName: "Ann"})
+	if !errors.Is(err, ErrInvalidRequest) || repo.inserts != 0 || len(repo.saved) != 0 {
+		t.Fatalf("err %v, inserts %d; want ErrInvalidRequest and no insert", err, repo.inserts)
 	}
 }
 

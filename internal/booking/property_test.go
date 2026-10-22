@@ -80,7 +80,7 @@ func (e *env) bookConcurrently(reqs []booking.Request) []error {
 	for i, req := range reqs {
 		wg.Go(func() {
 			<-start
-			_, errs[i] = e.svc.Book(context.Background(), req)
+			_, _, errs[i] = e.svc.Book(context.Background(), req)
 		})
 	}
 	close(start)
@@ -186,7 +186,7 @@ func TestProperty_Booking_SlotStartStoredAsCanonicalEpochSeconds(t *testing.T) {
 		resourceID := e.newResource(t)
 		requested := time.Unix(rng.Int64N(4_102_444_800), rng.Int64N(1e9)).In(time.FixedZone("z", (rng.IntN(27)-12)*3600+rng.IntN(4)*900))
 
-		b, err := e.svc.Book(context.Background(), booking.Request{ResourceID: resourceID, SlotStart: requested, CustomerName: "c", IdempotencyKey: fmt.Sprintf("k%d", iter)})
+		b, _, err := e.svc.Book(context.Background(), booking.Request{ResourceID: resourceID, SlotStart: requested, CustomerName: "c", IdempotencyKey: fmt.Sprintf("k%d", iter)})
 		if err != nil {
 			t.Fatalf("iter %d: %v", iter, err)
 		}
@@ -264,10 +264,10 @@ func TestProperty_Booking_SlotIdentityIsResourceAndCanonicalStart(t *testing.T) 
 		}
 		r1, s1 := pick()
 		r2, s2 := pick()
-		if _, err := e.svc.Book(context.Background(), booking.Request{ResourceID: r1, SlotStart: s1, CustomerName: "a", IdempotencyKey: fmt.Sprintf("p%d-a", iter)}); err != nil {
+		if _, _, err := e.svc.Book(context.Background(), booking.Request{ResourceID: r1, SlotStart: s1, CustomerName: "a", IdempotencyKey: fmt.Sprintf("p%d-a", iter)}); err != nil {
 			t.Fatalf("iter %d first: %v", iter, err)
 		}
-		_, err := e.svc.Book(context.Background(), booking.Request{ResourceID: r2, SlotStart: s2, CustomerName: "b", IdempotencyKey: fmt.Sprintf("p%d-b", iter)})
+		_, _, err := e.svc.Book(context.Background(), booking.Request{ResourceID: r2, SlotStart: s2, CustomerName: "b", IdempotencyKey: fmt.Sprintf("p%d-b", iter)})
 		same := r1 == r2 && booking.CanonicalSlotStart(s1).Equal(booking.CanonicalSlotStart(s2))
 		if competed := errors.Is(err, booking.ErrSlotTaken); competed != same || (!same && err != nil) {
 			t.Fatalf("iter %d: (%s, %v) then (%s, %v): err %v, same slot %v", iter, r1, s1, r2, s2, err, same)

@@ -18,7 +18,7 @@ import (
 // bookAt books slot i of Monday (base + i half hours) under a key unique to the trial.
 func (e *env) bookAt(t *testing.T, resourceID string, i int, key string) booking.Booking {
 	t.Helper()
-	b, err := e.svc.Book(context.Background(), booking.Request{
+	b, _, err := e.svc.Book(context.Background(), booking.Request{
 		ResourceID: resourceID, SlotStart: base.Add(time.Duration(i) * booking.SlotLength), CustomerName: "Ann", IdempotencyKey: key,
 	})
 	if err != nil {

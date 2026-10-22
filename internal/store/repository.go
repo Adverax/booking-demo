@@ -153,6 +153,22 @@ func (s *Store) GetBooking(ctx context.Context, id string) (booking.Booking, err
 	return b, nil
 }
 
+// GetBookingByIdempotencyKey reads the booking stored under key with one autocommit SELECT, in its
+// current state; no row is booking.ErrNotFound. The column's BINARY collation compares the key
+// byte for byte (ADR-0015), and its unique index answers the lookup (ADR-0008). It is the
+// classifying read of insert-then-classify and never shares a transaction with a write (ADR-0011,
+// ADR-0012).
+func (s *Store) GetBookingByIdempotencyKey(ctx context.Context, key string) (booking.Booking, error) {
+	b, err := scanBooking(s.db.QueryRowContext(ctx, "SELECT "+bookingColumns+" FROM booking WHERE idempotency_key = ?", key))
+	if errors.Is(err, sql.ErrNoRows) {
+		return booking.Booking{}, fmt.Errorf("store: get booking by idempotency key: %w", booking.ErrNotFound)
+	}
+	if err != nil {
+		return booking.Booking{}, fmt.Errorf("store: get booking by idempotency key: %w", err)
+	}
+	return b, nil
+}
+
 func scanBooking(row *sql.Row) (booking.Booking, error) {
 	var (
 		b      booking.Booking

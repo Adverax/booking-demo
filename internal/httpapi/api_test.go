@@ -43,6 +43,12 @@ type apiEnv struct {
 
 func newAPIEnv(t *testing.T) *apiEnv {
 	t.Helper()
+	return newAPIEnvWithClock(t, func() time.Time { return fixedNow })
+}
+
+// newAPIEnvWithClock is newAPIEnv with the service reading the current time from now (ADR-0013).
+func newAPIEnvWithClock(t *testing.T, now func() time.Time) *apiEnv {
+	t.Helper()
 	path := filepath.Join(t.TempDir(), "booking.db")
 	st, err := store.Open(context.Background(), path)
 	if err != nil {
@@ -54,7 +60,7 @@ func newAPIEnv(t *testing.T) *apiEnv {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { db.Close() })
-	srv := httpapi.NewServer(catalog.New(st), booking.NewService(st, func() time.Time { return fixedNow }))
+	srv := httpapi.NewServer(catalog.New(st), booking.NewService(st, now))
 	return &apiEnv{t: t, handler: httpapi.NewHandler(srv), db: db, spec: loadSpec(t), store: st}
 }
 
