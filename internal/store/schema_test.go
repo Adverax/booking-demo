@@ -226,3 +226,68 @@ func TestPropertySchema_ActiveSlotAndKeyStayUnique(t *testing.T) {
 		}
 	}
 }
+
+func bookingStatus(t *testing.T, db *sql.DB, id string) string {
+	t.Helper()
+	var status string
+	if err := db.QueryRow("SELECT status FROM booking WHERE id = ?", id).Scan(&status); err != nil {
+		t.Fatalf("read status of %s: %v", id, err)
+	}
+	return status
+}
+
+// AC-049: a cancelled booking whose slot has no active booking is set active by a statement issued
+// directly in the database; the schema aborts the update and the booking stays cancelled. The
+// active-slot index cannot stop this update (the slot is free), only the trigger of 0002 does.
+func TestSchema_RejectsCancelledToActiveTransition(t *testing.T) {
+	s := openTestStore(t)
+	insertResource(t, s.db, "r1")
+	if err := insertBooking(s.db, "b1", "r1", slot, "Ann", "k1", "cancelled"); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := s.db.Exec("UPDATE booking SET status = 'active' WHERE id = 'b1'")
+	if !isCancelledIsFinal(err) {
+		t.Fatalf("cancelled -> active: err = %v, want the booking_cancelled_is_final abort", err)
+	}
+	if got := bookingStatus(t, s.db, "b1"); got != "cancelled" {
+		t.Fatalf("status = %q after the rejected update, want cancelled", got)
+	}
+}
+
+// The trigger forbids only leaving 'cancelled': a repeated cancel and every transition of an
+// active booking are untouched, and so is any column other than status.
+func TestSchema_CancelledGuardAllowsEveryOtherTransition(t *testing.T) {
+	s := openTestStore(t)
+	insertResource(t, s.db, "r1")
+	if err := insertBooking(s.db, "b1", "r1", slot, "Ann", "k1", "active"); err != nil {
+		t.Fatal(err)
+	}
+	for _, stmt := range []string{
+		"UPDATE booking SET status = 'active' WHERE id = 'b1'",
+		"UPDATE booking SET status = 'cancelled' WHERE id = 'b1'",
+		"UPDATE booking SET status = 'cancelled' WHERE id = 'b1'",
+		"UPDATE booking SET customer_name = 'Ann B' WHERE id = 'b1'",
+	} {
+		if _, err := s.db.Exec(stmt); err != nil {
+			t.Fatalf("%s: %v", stmt, err)
+		}
+	}
+}
+
+func TestIsCancelledIsFinal_IgnoresOtherConstraintErrors(t *testing.T) {
+	s := openTestStore(t)
+	insertResource(t, s.db, "r1")
+	if err := insertBooking(s.db, "b1", "r1", slot, "Ann", "k1", "active"); err != nil {
+		t.Fatal(err)
+	}
+	for name, err := range map[string]error{
+		"unique": insertBooking(s.db, "b2", "r1", slot, "Bob", "k2", "active"),
+		"check":  insertBooking(s.db, "b3", "r1", slot+1800, "Bob", "k3", "pending"),
+		"nil":    nil,
+	} {
+		if isCancelledIsFinal(err) {
+			t.Errorf("%s error %v classified as the cancelled-is-final abort", name, err)
+		}
+	}
+}

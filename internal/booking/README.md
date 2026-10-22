@@ -10,6 +10,8 @@ The Slot Booking component (COMP-004): the Booking aggregate (AGG-002) and the s
 - Telling a replay or a key conflict apart from a taken slot (insert-then-classify, ADR-0011) is not done yet; it is CARD-005's.
 - The current time comes only from the clock injected into `NewService` (ADR-0013). `TestProperty_Booking_SlotStartStoredAsCanonicalEpochSeconds` fails if a production file of this package calls `time.Now`.
 - Keys and names are kept byte for byte as received (ADR-0015).
+- `Service.Cancel` cancels by id alone, no identity check (FR-007, CON-006), with the store's single `UPDATE` (ADR-0012); a repeated cancel returns the cancelled booking again (ADR-0003); an unknown id is `ErrNotFound`. `Service.Get` reads one booking.
+- Cancelled is final (INV-004, ADR-0010) twice over: `Booking.WithStatus` is the domain transition rule, and the schema trigger of migration 0002 aborts any update out of `cancelled`, reported by the store as `ErrBookingCancelled`.
 
 ## Key entities
 
@@ -17,9 +19,11 @@ The Slot Booking component (COMP-004): the Booking aggregate (AGG-002) and the s
 |------|------|-------------|------|
 | `Booking` | type | One booked slot; `SlotStart` is canonical UTC | [`booking.go`](./booking.go) |
 | `CanonicalSlotStart` | func | Start of the UTC half-hour slot containing an instant | [`booking.go`](./booking.go) |
-| `Service` | type | Books a slot (`Book`) | [`booking.go`](./booking.go) |
-| `Repository` | interface | Port to the store: one autocommit insert | [`booking.go`](./booking.go) |
+| `Booking.WithStatus` | method | Transition rule: a cancelled booking stays cancelled | [`booking.go`](./booking.go) |
+| `Service` | type | Books (`Book`), cancels (`Cancel`) and reads (`Get`) a booking | [`booking.go`](./booking.go) |
+| `Repository` | interface | Port to the store: one autocommit statement per operation | [`booking.go`](./booking.go) |
 | `ErrSlotTaken`, `ErrNotUnique` | var | Slot already booked; insert rejected by a unique index | [`booking.go`](./booking.go) |
+| `ErrNotFound`, `ErrBookingCancelled` | var | No booking with the id; a change would leave `cancelled` | [`booking.go`](./booking.go) |
 
 ## Usage
 

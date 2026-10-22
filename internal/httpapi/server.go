@@ -15,6 +15,8 @@ import (
 	"io"
 	"net/http"
 	"path"
+
+	"github.com/adverax/booking-demo/internal/booking"
 )
 
 // maxRequestBodyBytes caps how much of a request body is read. The largest request of the
@@ -104,8 +106,17 @@ func writeRequestError(w http.ResponseWriter, _ *http.Request, err error) {
 // The error text is internal and is not returned. Once a status line was sent nothing more can be
 // said on this response, so nothing is written. No logging is added here: no logging requirement
 // is decided (DEC-010).
-func writeResponseError(w http.ResponseWriter, _ *http.Request, _ error) {
+//
+// A handler error wrapping booking.ErrBookingCancelled is the one domain error answered here
+// instead of by a typed response: no operation of the contract requests the change it reports
+// (ADR-0010, ASM-0001), yet if any ever reaches the schema guard the caller gets the stable
+// 409 booking_cancelled the contract's ErrorCode declares, not a bare 500 (AC-030).
+func writeResponseError(w http.ResponseWriter, _ *http.Request, err error) {
 	if tw, ok := w.(*trackingWriter); ok && tw.wrote {
+		return
+	}
+	if errors.Is(err, booking.ErrBookingCancelled) {
+		writeError(w, http.StatusConflict, ErrorCodeBookingCancelled, "the booking is cancelled; a cancelled booking is final")
 		return
 	}
 	writeError(w, http.StatusInternalServerError, ErrorCodeInternalError, "internal error")

@@ -2,6 +2,8 @@ package store
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/adverax/booking-demo/internal/booking"
@@ -114,4 +116,53 @@ func (s *Store) queryResources(ctx context.Context, query string, args ...any) (
 		last.WeeklyHours = append(last.WeeklyHours, iv)
 	}
 	return rs, rows.Err()
+}
+
+// bookingColumns is the column list every booking read scans with scanBooking.
+const bookingColumns = "id, resource_id, slot_start, customer_name, idempotency_key, status"
+
+// UpdateBookingStatus sets the status of booking id with one autocommit UPDATE ... RETURNING: no
+// transaction and no read before it (ADR-0012, CON-007); the returned row is the booking as the
+// same statement left it. The trigger booking_cancelled_is_final (migration 0002, ADR-0010) aborts
+// the statement when it would move a cancelled booking to another status; that abort is returned
+// wrapping booking.ErrBookingCancelled and nothing is changed. No row is booking.ErrNotFound. The
+// update waits at most busyTimeout for the write lock.
+func (s *Store) UpdateBookingStatus(ctx context.Context, id string, to booking.Status) (booking.Booking, error) {
+	b, err := scanBooking(s.db.QueryRowContext(ctx,
+		"UPDATE booking SET status = ? WHERE id = ? RETURNING "+bookingColumns, string(to), id))
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return booking.Booking{}, fmt.Errorf("store: update booking status: %w", booking.ErrNotFound)
+	case isCancelledIsFinal(err):
+		return booking.Booking{}, fmt.Errorf("store: update booking status: %w", booking.ErrBookingCancelled)
+	case err != nil:
+		return booking.Booking{}, fmt.Errorf("store: update booking status: %w", err)
+	}
+	return b, nil
+}
+
+// GetBooking reads booking id with one autocommit SELECT; no row is booking.ErrNotFound.
+func (s *Store) GetBooking(ctx context.Context, id string) (booking.Booking, error) {
+	b, err := scanBooking(s.db.QueryRowContext(ctx, "SELECT "+bookingColumns+" FROM booking WHERE id = ?", id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return booking.Booking{}, fmt.Errorf("store: get booking: %w", booking.ErrNotFound)
+	}
+	if err != nil {
+		return booking.Booking{}, fmt.Errorf("store: get booking: %w", err)
+	}
+	return b, nil
+}
+
+func scanBooking(row *sql.Row) (booking.Booking, error) {
+	var (
+		b      booking.Booking
+		start  int64
+		status string
+	)
+	if err := row.Scan(&b.ID, &b.ResourceID, &start, &b.CustomerName, &b.IdempotencyKey, &status); err != nil {
+		return booking.Booking{}, err
+	}
+	b.SlotStart = fromEpoch(start)
+	b.Status = booking.Status(status)
+	return b, nil
 }

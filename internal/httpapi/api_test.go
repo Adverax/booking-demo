@@ -38,6 +38,7 @@ type apiEnv struct {
 	handler http.Handler
 	db      *sql.DB
 	spec    *openapi3.T
+	store   *store.Store
 }
 
 func newAPIEnv(t *testing.T) *apiEnv {
@@ -54,7 +55,7 @@ func newAPIEnv(t *testing.T) *apiEnv {
 	}
 	t.Cleanup(func() { db.Close() })
 	srv := httpapi.NewServer(catalog.New(st), booking.NewService(st, func() time.Time { return fixedNow }))
-	return &apiEnv{t: t, handler: httpapi.NewHandler(srv), db: db, spec: loadSpec(t)}
+	return &apiEnv{t: t, handler: httpapi.NewHandler(srv), db: db, spec: loadSpec(t), store: st}
 }
 
 // do sends one request and fails the test when the response does not conform to the contract.
@@ -313,8 +314,6 @@ func TestServer_UnimplementedOperationsAreInternalError(t *testing.T) {
 	e := newAPIEnv(t)
 	for _, c := range []struct{ method, target string }{
 		{http.MethodGet, "/resources/r1/availability?from=2026-11-02&to=2026-11-03"},
-		{http.MethodGet, "/bookings/b1"},
-		{http.MethodPost, "/bookings/b1/cancel"},
 	} {
 		rec := serve(e.handler, c.method, c.target, "")
 		assertError(t, rec, http.StatusInternalServerError, httpapi.ErrorCodeInternalError)
