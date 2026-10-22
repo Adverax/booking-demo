@@ -1,0 +1,153 @@
+version: 1
+generated_at: "2026-10-22T10:00:42Z"
+target: "card/009-release-criteria (main b1a6a52...HEAD 041faee)"
+overall_score: 9.0
+risk_level: low
+review_lane: fast
+reviewer: forge:review
+reviewer_version: "2026.10.10"
+model: "opus"
+
+task_contract_verdict: pass
+system_contract_verdict: pass
+overall_verdict: pass
+
+security: "applicable (1 findings)"
+
+coverage:
+  read:
+    - cmd/booking/release_test.go
+    - cmd/booking/main_test.go
+    - cmd/booking/README.md
+    - deploy/booking.service
+    - deploy/booking.env.example
+    - deploy/README.md
+    - internal/httpapi/server_test.go (diff + serve/assertError/stubServer helpers)
+    - cmd/booking/main.go (signal/shutdown lines only)
+    - meta/architecture/requirements.yml (test keys, NFR-003)
+    - meta/architecture/decisions/adr/0022-rule-to-test-coverage-check.md
+    - meta/kanban/cards/CARD-009.md
+  not_reached:
+    - "test execution: review is read-only; the suite was not run (implementer's green run is a claim, not evidence)"
+    - "systemd-analyze verify of deploy/booking.service (no systemd on this host)"
+    - internal/httpapi generated binder internals (path-parameter unescape path taken on trust of the new test's design)
+  confidence: high
+
+metrics:
+  diff: { files: 7, added: 538, removed: 0 }
+  max_fan_in: { symbol: "TestBookSlot_50ConcurrentRequestsExactlyOneWins", callers: 0 }
+  tests_cover_change: true
+  hotspots: ["internal/httpapi/server_test.go"]
+  cochange_missing: []
+  planned_test_names: 66
+  planned_names_missing_in_repo: 0
+  system_contract_check_refs_present: "40/40"
+  unmeasured:
+    max_fan_in: "no_eligible_fact — the diff adds only test helpers and test functions (package main, no exported production symbol); fan_in from meta/impact/impact-set-b1a6a5297dfc-041faeeb747e-worktree.json lists model/report references, not code callers"
+    deploy_reverse_deps: "no_eligible_fact — impact set: deploy/ stack 'unknown' declares no reverse-dependency command (no_recipe)"
+    deploy_fan_in: "no_eligible_fact — no_symbol_extractor for deploy/booking.service and deploy/booking.env.example"
+    cochange_missing: "no_eligible_fact — the only co-change pairs mined are meta/kanban card/board pairs; repository history is two days old, so no code peer history exists to be absent"
+
+system_contract:
+  rules_checked: 11
+  holds: 4
+  unchecked: 7
+  violated: 0
+  verdicts:
+    - "ADR-0010/R1 ✓ holds — diff changes no production or schema code (git diff main...HEAD --name-only: only *_test.go, READMEs, deploy/*; nothing under internal/booking, internal/store); check test TestBooking_CannotReactivate exists unchanged at internal/httpapi/cancel_test.go:231; the new e2e asserts the booking reads back cancelled after cancel (cmd/booking/release_test.go:105-109)"
+    - "ADR-0012/R1 ⚠ unchecked — no_eligible_fact: the diff adds no booking write-path code (no file under internal/store or internal/booking changed)"
+    - "ADR-0013/R1 ⚠ unchecked — no_eligible_fact: no instant storage or clock read in production code changed; tests read time.Now only to pick a future slot for the real binary (cmd/booking/main_test.go futureMondayNine, unchanged)"
+    - "ADR-0015/R1 ⚠ unchecked — no_eligible_fact: no key/name comparison or slot-identity code changed"
+    - "CON-007 ⚠ unchecked — no_eligible_fact: no write-path or transaction code in the diff"
+    - "CON-008 ⚠ unchecked — no_eligible_fact: no storage or API-boundary time conversion code in the diff"
+    - "INV-001 ✓ holds — no write-path change; AC-031 reuses the unchanged 50-request body via assertExactlyOneOf50Wins (cmd/booking/main_test.go:182-189, wrapper only, assertions untouched); all 5 check refs exist (grep '^func <name>(' over *_test.go: 5/5)"
+    - "INV-002 ⚠ unchecked — no_eligible_fact: no acceptance-window or clock code changed; 5/5 check refs exist unchanged"
+    - "INV-003 ✓ holds — no idempotency code changed; the new e2e asserts a repeat returns 200 with the original id and status (cmd/booking/release_test.go:92-97); all 17 check refs exist (grep: 17/17)"
+    - "INV-004 ✓ holds — no schema/domain change (internal/store/migrations untouched: git diff --quiet main...HEAD -- internal/store/migrations); e2e asserts cancel is final on read-back (release_test.go:100-109); all 5 check refs exist incl. TestSchema_RejectsCancelledToActiveTransition at internal/store/schema_test.go:242"
+    - "INV-005 ⚠ unchecked — no_eligible_fact: no resource validation code changed; the e2e creates one valid resource only; 8/8 check refs exist unchanged"
+
+root_causes: []
+
+findings:
+  - id: F-001
+    severity: low
+    category: tech-debt
+    type: risk
+    file: cmd/booking/release_test.go
+    line: 264
+    title: "Test discovery ignores build constraints"
+    description: |
+      goTestFunctions parses every *_test.go below the module root without evaluating //go:build
+      lines, so a planned test living only in a file excluded from `go test ./...` (e.g.
+      //go:build ignore, or a GOOS tag) counts as existing although it never runs. No such file
+      exists today (grep for go:build in *_test.go: 0 hits). Existence-only is the stated scope
+      (NG-2), so this is a hardening note, not an AC failure.
+    suggestion: |
+      Use go/build.Context.MatchFile (default context) to skip files the go tool would not build,
+      or refuse files carrying a build constraint.
+    confidence: medium
+    source: static
+    violates: null
+    root_cause: null
+    status: open
+    fixed_in: null
+    dismissed_reason: null
+    learned_pattern: null
+  - id: F-002
+    severity: low
+    category: tech-debt
+    type: question
+    file: cmd/booking/release_test.go
+    line: 209
+    title: "Coverage denominator is planned names, not rules"
+    description: |
+      AC-033's metric is rules_covered_by_a_named_test == 100%. The check collects every `test:`
+      value it finds, so an acceptance criterion or EC added later WITHOUT a `test:` key is not
+      counted at all and the check still passes. Today 66 AC/EC ids carry 66 test lines, so the
+      metric holds; the reading "every planned name exists" (ADR-0022 decision text) and the
+      reading "every rule has a name that exists" (NFR-003 metric) differ only on a future model.
+      The model validator may already enforce a test per AC; not verified here.
+    suggestion: |
+      Either refuse an acceptance[]/engineering_constraints[] entry with no `test:` key, or record
+      that the per-rule presence of a name is the model validator's job (ADR-0022 consequence).
+    confidence: medium
+    source: model
+    violates: null
+    root_cause: null
+    status: open
+    fixed_in: null
+    dismissed_reason: null
+    learned_pattern: null
+  - id: F-003
+    severity: low
+    category: compliance
+    type: question
+    file: deploy/booking.env.example
+    line: 7
+    title: "Sample listens on all interfaces while security is undecided"
+    description: |
+      BOOKING_ADDR=:8080 exposes the unauthenticated API on every interface of the host; the
+      cmd/booking README's own example uses 127.0.0.1:8080, and security (DEC-011) is open. The
+      value mirrors the binary default, so it is not wrong, but the sample is silent on exposure.
+    suggestion: |
+      Add one comment line noting the API carries no authentication and the bind address should
+      be chosen with that in mind (DEC-011 open), without picking an answer.
+    confidence: medium
+    source: static
+    violates: null
+    root_cause: null
+    status: open
+    fixed_in: null
+    dismissed_reason: null
+    learned_pattern: null
+
+minor_triage:
+  sampled: 2
+  total: 3
+  items:
+    - finding: "Test discovery ignores build constraints"
+      should_gate: false
+      rationale: "Hardening only: no build-constrained test file exists today and NG-2 scopes the check to existence."
+    - finding: "Coverage denominator is planned names, not rules"
+      should_gate: false
+      rationale: "The metric holds today (66 rules, 66 names, 0 missing) and AC-033's literal text scopes the check to named tests."

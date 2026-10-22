@@ -5,3 +5,4 @@
 2026-10-22 wave-4 full-suite 3s PASS (CARD-005 merged)
 2026-10-22 wave-5 full-suite 2s PASS (CARD-007 merged; CARD-008 deferred)
 2026-10-22 wave-5 full-suite 4s PASS (CARD-008 merged; wave 5 continued after the deferral was lifted)
+2026-10-22 wave-6 full-suite 2s PASS (CARD-009 merged; merge-gate reuse not taken: target tree moved with the changelog commit, working tree dirty)

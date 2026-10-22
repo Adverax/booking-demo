@@ -30,4 +30,4 @@ waves:
     checkpoint: "`go test -run TestRelease ./...` passes: the full API works end to end against a fresh database, exactly one of 50 concurrent bookings wins, and every rule has at least one named test."
     collapses: [ASM-0005, DEC-031, NFR-002, NFR-003]
     rollback: "nothing new is shipped by this increment beyond the checks and a sample supervisor unit and environment file; revert the merges. First release is the point of no return and is crossed only after this checkpoint passes."
-    status: pending
+    status: passed
