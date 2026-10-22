@@ -1,0 +1,134 @@
+version: 1
+generated_at: "2026-10-22T08:50:27Z"
+target: "card/007-booking-validation (main 349de59...HEAD 62ed082)"
+overall_score: 8.5
+risk_level: medium
+review_lane: deep
+reviewer: forge:review
+reviewer_version: "2026.10.10"
+model: "opus"
+
+task_contract_verdict: pass
+system_contract_verdict: pass
+overall_verdict: pass
+
+security: applicable (0 findings)
+
+coverage:
+  read:
+    - "internal/booking/ (booking.go full, all changed tests)"
+    - "internal/httpapi/bookings.go, validation_test.go, api_test.go, cancel_test.go"
+    - "cmd/booking/main.go"
+    - "internal/store/repository.go (GetResource, queryResources)"
+    - "internal/catalog/catalog.go (method set: Create/List/Get only)"
+    - "api/openapi.yaml (bookSlot)"
+    - "ADR-0011, ADR-0018, ADR-0020; components-booking.puml"
+  not_reached:
+    - "internal/httpapi/replay_test.go helpers (newReplayEnv, bookThenSlotStarts) read by name only"
+    - "cmd/booking real-binary test body (only its pass result)"
+  confidence: high
+  notes: "go build, go vet and go test -count=1 ./... green on 62ed082 (run by the reviewer)"
+
+metrics:
+  diff: { files: 12, added: 675, removed: 81 }
+  max_fan_in: { symbol: "booking.Service.Book", files: 12, reference_lines: 41 }
+  new_constructor_callers: { symbol: "booking.NewService", callers: 21, all_updated: true }
+  tests_cover_change: true
+  hotspots: []
+  cochange_missing: []
+  impact_artifact: "meta/impact/impact-set-349de59d4b9a-62ed08242ca3-worktree.json"
+  unmeasured:
+    fan_in_cmd_booking_main: "no_eligible_fact — cmd/booking/main.go exports no symbols (impact computer: no_exported_symbols)"
+    cochange_missing: "budget_truncated — impact computer reports co_change_truncated: true; every listed peer is in the diff"
+    hotspots: "no_eligible_fact — repository history is days old; churn 1-5 commits per file, 0 fix commits"
+
+system_contract:
+  rules_checked: 11
+  holds: 10
+  unchecked: 1
+  violated: 0
+  verdicts:
+    - "ADR-0010/R1 ✓ holds — diff touches no status-transition code or schema; TestBooking_CannotReactivate (internal/httpapi/cancel_test.go, only its NewService call changed) green on 62ed082"
+    - "ADR-0012/R1 ✓ holds — Book issues at most 3 single autocommit statements (resources.Get join SELECT, then InsertBooking or GetBookingByIdempotencyKey); grep BeginTx in internal/booking production files: 0 hits"
+    - "ADR-0013/R1 ✓ holds — s.now() called once at internal/booking/booking.go:213; inPast compares Unix() seconds; assertNoSystemClock + TestProperty_Booking_PastCheckUsesInjectedClock (400 seeded cases) green"
+    - "ADR-0015/R1 ✓ holds — validateShape checks == \"\" without trimming; SamePayload unchanged, shared by both paths via resolveStoredKey; TestBookSlot_CustomerNameComparison* green"
+    - "CON-007 ✓ holds — same evidence as ADR-0012/R1: no transaction, single autocommit statements"
+    - "CON-008 ✓ holds — instants stay time.Time/epoch seconds in domain; RFC 3339 conversion only in internal/httpapi/bookings.go; clock injected via NewService"
+    - "INV-001 ✓ holds — validation reads only immutable resource data (catalog has Create/List/Get only) and the clock; insert still decided by unique index; TestProperty_Booking_NoOverlapUnderConcurrency (now with ~20% invalid requests mixed in) and TestBookSlot_50ConcurrentRequestsExactlyOneWins green"
+    - "INV-002 ✓ holds — booking.go:210 hours check and :213 past check (start.Unix() < now.Unix()) before any insert; TestBookSlot_AcceptsSlotStartingExactlyNow, _RejectsSlotInThePast, _RejectsSlotOutsideWorkingHours, _RejectsSlotStartingOneSecondBeforeNow, _UnknownKeyForPastSlotIsRejectedAsPast, TestProperty_Booking_AcceptedOnlyInsideWorkingHoursAndNotInPast green"
+    - "INV-003 ✓ holds — past path resolves the stored key via resolveStoredKey before rejecting (booking.go:214); all 17 named tests present and green, incl. AC-055/056/058"
+    - "INV-004 ⚠ unchecked — check_ref_missing: TestBookSlot_RepeatAfterCancelCreatesNoNewBooking (no such func in the repo; pre-existing, not caused by this diff); manual read of this diff found no violation, other 4 named tests green"
+    - "INV-005 ✓ holds — internal/catalog untouched; booking only reads intervals; all 8 named TestCreateResource_* tests green"
+
+root_causes:
+  - id: RC-1
+    title: "Published bookSlot contract text predates the validate-before-classify order of ADR-0011/ADR-0020"
+    finding_ids: [F-001]
+
+findings:
+  - id: F-001
+    severity: high
+    category: tech-debt
+    type: question
+    file: api/openapi.yaml
+    line: 178
+    title: "Implemented validation-before-key order contradicts the bookSlot contract's Idempotency/Slots paragraphs"
+    description: |
+      In scope: caused by internal/booking/booking.go:203-216 (this diff), which puts the resource,
+      working-hours and shape rejections in front of insert-then-classify. api/openapi.yaml:178-188
+      says "A request whose key is already stored is resolved from the stored booking ... any
+      difference in that payload: 409 idempotency_key_conflict" and conditions 422
+      slot_outside_working_hours on "A request whose key is not stored". After this diff a stored
+      key reused with a different payload that is outside working hours (or names an unknown
+      resource) gets 422 / 404, not 409; before this diff (CARD-005) it got 409. The new test
+      internal/httpapi/validation_test.go:119 ("before opening" under stored K1, different slot)
+      pins 422, i.e. pins behavior the published contract describes differently. The task contract
+      and ADR-0020 ("keep the order of ADR-0011: validate, insert, classify") support the code, and
+      the implementer recorded the choice in the card's STRUCTURE note — so this is an artifact
+      conflict, not a code bug, but the contract (the source of truth for the API, contract-first)
+      now misdescribes an observable, tested behavior, and nothing in the model records the
+      resolution.
+    suggestion: |
+      Do not change the code. Reconcile the contract: amend api/openapi.yaml's bookSlot description
+      (Idempotency: "after validation"; Slots: drop "whose key is not stored" or state the order;
+      409 description) through forge:architect, or surface a DEC if the 409-first reading is wanted.
+      Either way the card should not merge while the published contract and the pinned test disagree.
+    confidence: medium
+    source: model
+    violates: null
+    root_cause: RC-1
+    status: fixed
+    fixed_in: null
+    dismissed_reason: null
+    learned_pattern: null
+
+  - id: F-002
+    severity: low
+    category: tech-debt
+    type: risk
+    file: internal/booking/validation_property_test.go
+    line: 35
+    title: "Past-check property draws slots with replacement on one resource, a collision would fail as ErrSlotTaken"
+    description: |
+      In scope: new file of this diff. 400 slots drawn from ~2.1M half-hour starts on a single
+      resource; two accepted draws on the same slot would make the second request ErrSlotTaken and
+      fail the property for a reason unrelated to the clock. Seed 10 passes today (birthday odds
+      roughly 4% per seed), so it is a latent fragility on any seed change, not a current failure.
+    suggestion: "Create a resource per iteration, or skip already-drawn slots."
+    confidence: high
+    source: static
+    status: fixed
+    fixed_in: null
+
+minor_triage:
+  sampled: 1
+  total: 1
+  items:
+    - finding: "Past-check property draws slots with replacement on one resource, a collision would fail as ErrSlotTaken"
+      should_gate: false
+      rationale: "Seeded and green; only a seed change could expose it, and the failure would be loud, not a false pass."
+
+out_of_scope:
+  - "internal/booking/booking.go:245 insideWorkingHours restates catalog.Interval semantics in booking (declared in STRUCTURE); CARD-008 needing the same check should move it to a catalog.Resource method."
+  - "cmd/booking/main.go shutdownTimeout = 10 s < worst-case 3 x busyTimeout = 15 s; declared in the failure matrix, in-flight request falls into the crash row (rows under key <= 1). Pre-existing constant."
+  - "INV-004 check ref TestBookSlot_RepeatAfterCancelCreatesNoNewBooking does not exist (pre-existing model defect): write the test or re-type the check."

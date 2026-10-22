@@ -15,6 +15,7 @@
 ## Convergence
 - ⚠ NOT converged at FR level — every criterion owned by this wave's card holds; the open criteria are routed to already-planned cards, not new follow-ups: AC-042 and AC-025 (availability listing) → CARD-008 (wave 5); FR-006's past-slot clause (AC-057, ordering of the key lookup against the past check per ADR-0020) → CARD-007 (wave 5). Diagnosis (implementation gap vs misunderstood requirement) not asked: no interactive operator in this run; both are decomposition-planned, so recorded as implementation gaps owned by those cards.
 - FR-008 converged (CARD-004, merged after the wave-3 tag).
+  ↳ FR-006 past-slot clause (AC-057, ADR-0020 key lookup on the past-slot rejection) converged in wave 5 (2026-10-22, CARD-007)
 - UI gaps: none — backend-only HTTP API (UI surface: none), no frontend in scope.
 
 ## Wave checkpoint

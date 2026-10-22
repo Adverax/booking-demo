@@ -1,6 +1,6 @@
 # Kanban Board
 
-_Updated: 2026-10-22 11:36_
+_Updated: 2026-10-22 12:03_
 
 ## Wave plan
 | Wave | Cards | Status |
@@ -9,13 +9,13 @@ _Updated: 2026-10-22 11:36_
 | 2 | CARD-003 P1 | ✓ done |
 | 3 | CARD-004 P1, CARD-006 P2 | ✓ done |
 | 4 | CARD-005 P1 | ✓ done |
-| 5 | CARD-007 P1, CARD-008 P1 | ▶ active |
-| 6 | CARD-009 P1 | ⏳ blocked (→ CARD-007, CARD-008) |
+| 5 | CARD-007 P1, CARD-008 P1 | ▶ active ⚠ (CARD-008 blocked) |
+| 6 | CARD-009 P1 | ⏳ blocked (→ CARD-008) |
 
 _Gantt: [meta/kanban/gantt.md](gantt.md)_
 
 ## Ready
-- **CARD-007** P1 · Booking validation: working hours, past slots, alignment, unknown resource  _(wave 5)_
+_(none)_
 
 ## In Progress
 _(none)_
@@ -30,6 +30,7 @@ _(none)_
 - **CARD-004** Cancel a booking and keep cancellation final
 - **CARD-005** Idempotent booking replay with insert-then-classify
 - **CARD-006** Resource catalog: validated creation, list and read
+- **CARD-007** Booking validation: working hours, past slots, alignment, unknown resource
 
 ## Blocked
 - **CARD-008** 🔒 Availability search over a date range  ← deferred to next wave
