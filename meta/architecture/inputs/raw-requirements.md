@@ -72,5 +72,7 @@
 - The end of a weekly working-hours interval may be written 24:00, the end of the UTC day (exclusive); the start of an interval may not be 24:00 and no bound may exceed 24:00; every bound stays aligned to the half hour (FR). Source: ADR-0004 revised 2026-10-22.
 # processed: 2026-10-22 -> rename of PropertyTest_ to TestProperty_ in requirements.yml (EC-001..EC-005); no CON, trace.yml has no entry for one
 - Planned test names in acceptance criteria, edge cases and invariant checks must be valid Go test function names: names that start with PropertyTest_ are renamed to start with TestProperty_ (same remainder), because Go only runs functions that start with Test; the renaming keeps every criterion id unchanged (CON, maintenance). Source: CARD-002 review finding, 2026-10-22.
+# processed: 2026-10-22 -> NFR-001 (reclassified, nfr_coverage scalability not_applicable)
 - NFR-001 (exactly one of 50 simultaneous booking requests for the same slot succeeds) is a correctness release criterion about the no-double-booking invariant, not a scalability target; the scalability category is not applicable to the first release because the brief states no load figure (NFR coverage). Source: ADR-0021, 2026-10-22.
+# processed: 2026-10-22 -> NFR-003 / AC-033
 - Rule-to-test coverage is verified by a Go release test, named TestRelease_EveryRuleHasANamedTest, that reads the planned test names from the requirements model and fails when a named test does not exist as a Go test function in the repository (NFR). Source: ADR-0022, 2026-10-22.

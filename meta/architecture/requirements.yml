@@ -535,11 +535,14 @@ functional:
 
 non_functional:
   - id: NFR-001
-    category: scalability
+    # ADR-0021: a correctness release criterion (proof of INV-001 under concurrency), not a scalability
+    # target. The fixed category list has no correctness value, so the closest honest one is operability,
+    # the category of the other release criterion (NFR-002); scalability is not applicable (nfr_coverage).
+    category: operability
     metric: successful_bookings_per_50_simultaneous_requests_for_one_slot
     threshold: exactly 1
     condition: 50 simultaneous booking requests for the same slot (release criterion)
-    rationale: Concurrent bookings of one slot must resolve to exactly one winner; this drives the storage and locking design.
+    rationale: A correctness release criterion (ADR-0021), not a scale target; it proves the no-double-booking invariant (INV-001) under concurrency - 50 simultaneous requests for one slot resolve to exactly one winner. The brief states no load figure.
     acceptance:
       - id: AC-031
         given: a free future slot and a fresh database
@@ -547,6 +550,14 @@ non_functional:
         then: successful_bookings == 1
         kind: concurrency
         test: TestRelease_ConcurrencyExactlyOneWinner
+    clarification:
+      scope: "In: reclassifying NFR-001 as a correctness release criterion for INV-001 (ADR-0021). Out: any scale, throughput or latency target (the brief states none, ADR-0017)."
+      actors: "No actor sees a change: the criterion is verified by the release test."
+      error_alt_paths: "No change: the 49 losing requests get the slot-taken conflict already defined by FR-005 and FR-006."
+      data: "No data change."
+      edge_cases: "The 50-request count, the single winner and AC-031 are unchanged."
+      nfr: "Category label changes from scalability to operability (the fixed list has no correctness value); the scalability category becomes not_applicable (no load figure in the brief)."
+      dependencies: "trace.yml#NFR-001, CAP-003 and CARD-009 are in the impact radius; the trace and capability entries are not edited by this delta."
   - id: NFR-002
     category: operability
     metric: end_to_end_api_scenarios_passing_on_fresh_database
@@ -565,14 +576,22 @@ non_functional:
     metric: rules_covered_by_a_named_test
     threshold: 100%
     condition: every rule of the design brief ("Rules that must always hold" and the stated FRs) (release criterion)
-    rationale: First-release criterion of the design brief; every rule needs at least one named test.
+    rationale: First-release criterion of the design brief; every rule needs at least one named test. Verified by an executable check, not by the model's own claim - a Go release test reads the planned test names from the model and fails when a named test does not exist as a Go test function (ADR-0022).
     acceptance:
       - id: AC-033
         given: the list of rules and their linked test names in requirements.yml
-        when: the rule-to-test coverage check runs
-        then: rules_covered_by_a_named_test == 100%
+        when: the Go release test TestRelease_EveryRuleHasANamedTest reads every planned test name from requirements.yml
+        then: rules_covered_by_a_named_test == 100%, and the test fails when a named test is not a Go test function in the repository
         kind: boundary
         test: TestRelease_EveryRuleHasANamedTest
+    clarification:
+      scope: "In: naming the verification mechanism of AC-033 (ADR-0022): a Go release test reads the planned test names from the model and fails on a name that is not a Go test function. Out: judging whether a named test is meaningful (review does that)."
+      actors: "No actor sees a change: the check runs with the ordinary test command and the delivery gates."
+      error_alt_paths: "A missing, renamed or invalid test name fails the build instead of passing silently."
+      data: "The test reads the model files under meta/architecture/; a schema change of the model can break it (ADR-0022 consequence)."
+      edge_cases: "A name that is not a valid Go test function name (for example the old PropertyTest_ prefix) counts as missing."
+      nfr: "No threshold moves: 100% stays; the mechanism is now executable and not a claim of the model."
+      dependencies: "trace.yml#NFR-003 and CARD-009 are in the impact radius; reading YAML in Go may add a dependency with an allowlisted licence (ADR-0022)."
 
 nfr_coverage:
   availability:
@@ -597,8 +616,8 @@ nfr_coverage:
     status: not_applicable
     reason: "ADR-0017: the brief states no latency or throughput figure and NFR-001 verifies correctness under concurrency only; revisit when the studio supplies a metric and a threshold"
   scalability:
-    status: covered
-    refs: [NFR-001]
+    status: not_applicable
+    reason: "ADR-0021: the brief states no load figure; NFR-001 is a correctness release criterion for INV-001, not a scalability target; revisit when the studio supplies a load figure"
   security:
     status: surfaced
     ref: DEC-011

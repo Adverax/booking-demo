@@ -105,3 +105,39 @@ entries:
     artifact: meta/architecture/trace.yml
     field: 'req: FR-004'
   sources_absent: []
+- id: NFR-001
+  at: '2026-10-22T09:42:19Z'
+  commit: a78a3ac
+  commit_reason: ok
+  radius_count: 3
+  radius:
+  - id: CAP-003
+    kind: capability
+    artifact: meta/architecture/domain/capabilities.yml
+    field: 'requirements[4]: NFR-001'
+  - id: CARD-009
+    kind: card
+    artifact: meta/kanban/cards/CARD-009.md
+    field: '- TestRelease_ConcurrencyExactlyOneWinner: against the real binary and
+      a fresh database, 50 simultaneous booking reques…'
+  - id: trace.yml#NFR-001
+    kind: trace_entry
+    artifact: meta/architecture/trace.yml
+    field: 'req: NFR-001'
+  sources_absent: []
+- id: NFR-003
+  at: '2026-10-22T09:42:19Z'
+  commit: a78a3ac
+  commit_reason: ok
+  radius_count: 2
+  radius:
+  - id: CARD-009
+    kind: card
+    artifact: meta/kanban/cards/CARD-009.md
+    field: '- TestRelease_EveryRuleHasANamedTest: every rule of the design brief (the
+      invariants and the stated FRs) is linked to a…'
+  - id: trace.yml#NFR-003
+    kind: trace_entry
+    artifact: meta/architecture/trace.yml
+    field: 'req: NFR-003'
+  sources_absent: []
