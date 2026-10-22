@@ -1,0 +1,32 @@
+# Sample systemd unit for the booking service (ADR-0005): one process of the single binary,
+# configured only through environment variables, with its SQLite file on a local disk.
+#
+# The service must run as a single instance, because SQLite allows one writer process
+# (ADR-0005). This unit runs one process; nothing enforces the premise beyond that (DEC-029).
+#
+# Install (as root):
+#   install -m 0755 booking /usr/local/bin/booking
+#   install -d -m 0750 /etc/booking && install -m 0640 booking.env.example /etc/booking/booking.env
+#   install -m 0644 booking.service /etc/systemd/system/booking.service
+#   systemctl daemon-reload && systemctl enable --now booking
+
+[Unit]
+Description=Booking service
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/booking
+EnvironmentFile=/etc/booking/booking.env
+DynamicUser=yes
+# Creates /var/lib/booking, owned by the service user, on the local disk; BOOKING_DB_PATH points into it.
+StateDirectory=booking
+StateDirectoryMode=0750
+# SIGTERM starts the bounded drain (10 s); give it room before SIGKILL.
+KillSignal=SIGTERM
+TimeoutStopSec=20
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

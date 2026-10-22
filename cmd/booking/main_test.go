@@ -180,6 +180,13 @@ func createResource(t *testing.T, client *http.Client, baseURL string) string {
 // simultaneous requests with distinct keys for one free future slot: exactly one 201, 49 × 409
 // slot_taken, and nothing else — in particular no 500 from a lock or busy error.
 func TestBookSlot_50ConcurrentRequestsExactlyOneWins(t *testing.T) {
+	assertExactlyOneOf50Wins(t)
+}
+
+// assertExactlyOneOf50Wins is the 50-request check shared by AC-019 and the release criterion
+// AC-031: it starts its own binary on a fresh database file.
+func assertExactlyOneOf50Wins(t *testing.T) {
+	t.Helper()
 	const writers = 50
 	dbPath := filepath.Join(t.TempDir(), "booking.db")
 	svc := startService(t, dbPath)
