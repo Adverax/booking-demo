@@ -1,6 +1,6 @@
 # CARD-008: Availability search over a date range
 
-**Status:** ready
+**Status:** blocked
 **Priority:** P1
 **Category:** feature
 **Estimate:** 1c
@@ -23,7 +23,7 @@
 **Closed:** —
 **Actual:** —
 **Merge commit:** —
-**Blocked by:** —
+**Blocked by:** deferred to next wave
 
 ## What to implement
 
@@ -109,3 +109,4 @@ Revised since the last cut: ADR-0004 (2026-10-22) lets an interval end at 24:00,
 ## Worktree notes
 
 Open decisions touching this card (do not answer them here): DEC-016 (range input validation), DEC-015 (cross-aggregate read of working hours). AC-025 and AC-042 are relocated here from Increment 2 (see What to implement).
+[Deferred] to next wave (2026-10-22) — wave 5 restricted by user decision to CARD-007; CARD-007 and CARD-008 both touch internal/httpapi/**.go and the scope gate's poached measurement counts a ready same-wave sibling.

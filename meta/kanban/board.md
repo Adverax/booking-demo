@@ -1,6 +1,6 @@
 # Kanban Board
 
-_Updated: 2026-10-22 11:27_
+_Updated: 2026-10-22 11:36_
 
 ## Wave plan
 | Wave | Cards | Status |
@@ -16,7 +16,6 @@ _Gantt: [meta/kanban/gantt.md](gantt.md)_
 
 ## Ready
 - **CARD-007** P1 · Booking validation: working hours, past slots, alignment, unknown resource  _(wave 5)_
-- **CARD-008** P1 · Availability search over a date range  _(wave 5)_
 
 ## In Progress
 _(none)_
@@ -33,4 +32,5 @@ _(none)_
 - **CARD-006** Resource catalog: validated creation, list and read
 
 ## Blocked
+- **CARD-008** 🔒 Availability search over a date range  ← deferred to next wave
 - **CARD-009** 🔒 Release criteria suite and supervisor deployment sample  ← readiness — blocking_decisions_resolved, dependencies_resolved
