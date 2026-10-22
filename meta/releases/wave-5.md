@@ -41,3 +41,4 @@
 
 ## Metrics snapshot
 - `capture.py --wave 5` exit 2, REFUSED: "the signal definitions registry is missing: meta/metrics/signal-definitions.yml" (ADR-0032). No snapshot written.
+- Second close (after CARD-008): `capture.py --wave 5` exit 2 again, REFUSED for the same reason (meta/metrics/signal-definitions.yml missing). No snapshot written.
