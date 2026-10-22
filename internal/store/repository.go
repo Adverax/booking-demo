@@ -5,15 +5,18 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 
+	"github.com/adverax/booking-demo/internal/availability"
 	"github.com/adverax/booking-demo/internal/booking"
 	"github.com/adverax/booking-demo/internal/catalog"
 )
 
 // The store is the adapter of the ports declared by the components that consume it.
 var (
-	_ booking.Repository = (*Store)(nil)
-	_ catalog.Repository = (*Store)(nil)
+	_ booking.Repository    = (*Store)(nil)
+	_ catalog.Repository    = (*Store)(nil)
+	_ availability.Bookings = (*Store)(nil)
 )
 
 // InsertBooking stores b with one autocommit INSERT: no transaction and no read before it
@@ -181,4 +184,32 @@ func scanBooking(row *sql.Row) (booking.Booking, error) {
 	b.SlotStart = fromEpoch(start)
 	b.Status = booking.Status(status)
 	return b, nil
+}
+
+// ActiveBookingStarts returns the slot starts of the active bookings of resourceID whose start
+// lies in [from, to), ordered by start, with one autocommit SELECT: no transaction (ADR-0012,
+// CON-007). Cancelled bookings are not returned, so their slots read as free (FR-007). The partial
+// unique index on the active slot (ADR-0008) answers the query.
+func (s *Store) ActiveBookingStarts(ctx context.Context, resourceID string, from, to time.Time) ([]time.Time, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT slot_start FROM booking
+		 WHERE resource_id = ? AND status = 'active' AND slot_start >= ? AND slot_start < ?
+		 ORDER BY slot_start`,
+		resourceID, toEpoch(from), toEpoch(to))
+	if err != nil {
+		return nil, fmt.Errorf("store: active booking starts: %w", err)
+	}
+	defer rows.Close()
+	starts := []time.Time{}
+	for rows.Next() {
+		var sec int64
+		if err := rows.Scan(&sec); err != nil {
+			return nil, fmt.Errorf("store: active booking starts: %w", err)
+		}
+		starts = append(starts, fromEpoch(sec))
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("store: active booking starts: %w", err)
+	}
+	return starts, nil
 }

@@ -18,6 +18,7 @@ import (
 	"github.com/getkin/kin-openapi/openapi3filter"
 	"github.com/getkin/kin-openapi/routers"
 
+	"github.com/adverax/booking-demo/internal/availability"
 	"github.com/adverax/booking-demo/internal/booking"
 	"github.com/adverax/booking-demo/internal/catalog"
 	"github.com/adverax/booking-demo/internal/httpapi"
@@ -60,7 +61,8 @@ func newAPIEnvWithClock(t *testing.T, now func() time.Time) *apiEnv {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { db.Close() })
-	srv := httpapi.NewServer(catalog.New(st), booking.NewService(st, catalog.New(st), now))
+	cat := catalog.New(st)
+	srv := httpapi.NewServer(cat, availability.NewService(cat, st), booking.NewService(st, cat, now))
 	return &apiEnv{t: t, handler: httpapi.NewHandler(srv), db: db, spec: loadSpec(t), store: st}
 }
 
@@ -314,15 +316,4 @@ func TestBookSlot_NormalisesSlotStartToCanonicalUTC(t *testing.T) {
 		t.Fatalf("slotStart not canonical UTC: %s", rec.Body)
 	}
 	assertError(t, e.book(r.Id, monday9, "Bob", "key-bob"), http.StatusConflict, httpapi.ErrorCodeSlotTaken)
-}
-
-// Operations whose cards have not landed answer the contract's 500 internal_error.
-func TestServer_UnimplementedOperationsAreInternalError(t *testing.T) {
-	e := newAPIEnv(t)
-	for _, c := range []struct{ method, target string }{
-		{http.MethodGet, "/resources/r1/availability?from=2026-11-02&to=2026-11-03"},
-	} {
-		rec := serve(e.handler, c.method, c.target, "")
-		assertError(t, rec, http.StatusInternalServerError, httpapi.ErrorCodeInternalError)
-	}
 }
