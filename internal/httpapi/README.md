@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The HTTP API of the booking service (COMP-001). The types and the `net/http` server interface are generated from the contract [`api/openapi.yaml`](../../api/openapi.yaml) (contract first, ADR-0009). `NewHandler` mounts the generated routes on `http.ServeMux` and makes every failure that happens before or around a handler answer in the contract's JSON error shape. The package holds no handler logic: each behaviour's handler is written by the card that owns it.
+The HTTP API of the booking service (COMP-001). The types and the `net/http` server interface are generated from the contract [`api/openapi.yaml`](../../api/openapi.yaml) (contract first, ADR-0009). `NewHandler` mounts the generated routes on `http.ServeMux` and makes every failure that happens before or around a handler answer in the contract's JSON error shape. `Server` implements the generated `StrictServerInterface` over the domain components; each operation lives in the file of its tag (`resources.go`, `bookings.go`), and operations whose card has not landed yet are in `unimplemented.go` and answer 500 `internal_error`.
 
 ## Architecture
 
@@ -15,12 +15,13 @@ The HTTP API of the booking service (COMP-001). The types and the `net/http` ser
   - a body that is not exactly one JSON value, or a parameter that cannot be bound, goes to 400 `validation_error`;
   - a handler error or panic goes to 500 `internal_error`, and the error text is not returned.
 - Schema keywords such as `minLength`, `pattern` and `enum` are declarative contract. There is no runtime schema validator, and kin-openapi is used only in tests. The domain cards enforce those rules and answer `validation_error`.
-- The package depends only on the generated code and `github.com/oapi-codegen/runtime`. It does not import the store or any domain package.
+- The plumbing (`server.go`) depends only on the generated code and `github.com/oapi-codegen/runtime`. The handlers (`Server`) import the domain packages `internal/catalog` and `internal/booking` and translate between the generated types and the domain: instants are converted to and from RFC 3339 UTC here only (CON-008), and domain errors become the contract's codes (`booking.ErrSlotTaken` is 409 `slot_taken`). The package never imports the store.
 
 ## Key entities
 
 | Name | Kind | Description | File |
 |------|------|-------------|------|
+| `Server` / `NewServer` | type | Implements `StrictServerInterface` over the catalog and booking components | [`handlers.go`](./handlers.go) |
 | `NewHandler` | func | Mounts the generated routes on `http.ServeMux` behind the contract's error mapping | [`server.go`](./server.go) |
 | `StrictServerInterface` | interface | One method per operation of the contract; implemented by the handler cards | [`api.gen.go`](./api.gen.go) |
 | `ErrorCode` | type | The stable error codes, declared once in the spec | [`api.gen.go`](./api.gen.go) |
@@ -29,7 +30,7 @@ The HTTP API of the booking service (COMP-001). The types and the `net/http` ser
 ## Usage
 
 ```go
-// impl implements httpapi.StrictServerInterface.
+impl := httpapi.NewServer(catalog.New(st), booking.NewService(st, time.Now))
 srv := &http.Server{Addr: ":8080", Handler: httpapi.NewHandler(impl)}
 ```
 
