@@ -1,0 +1,143 @@
+version: 1
+generated_at: "2026-10-22T07:57:41Z"
+target: "card/004-cancel-booking-final (ec8706f) vs main (b8c2b7b)"
+overall_score: 9.0
+risk_level: low
+review_lane: fast
+reviewer: forge:review
+reviewer_version: "2026.10.10"
+model: "claude-opus-5-5"
+
+task_contract_verdict: pass
+system_contract_verdict: pass
+overall_verdict: pass
+
+security: applicable (0 findings)
+
+coverage:
+  read:
+    - "internal/booking/booking.go"
+    - "internal/booking/booking_test.go"
+    - "internal/booking/cancel_property_test.go"
+    - "internal/booking/property_test.go"
+    - "internal/httpapi/bookings.go"
+    - "internal/httpapi/server.go"
+    - "internal/httpapi/unimplemented.go (HEAD and main)"
+    - "internal/httpapi/cancel_test.go"
+    - "internal/httpapi/api_test.go (diff)"
+    - "internal/store/repository.go"
+    - "internal/store/store.go (diff, busyTimeout)"
+    - "internal/store/migrate.go (transaction shape)"
+    - "internal/store/migrations/0002_cancelled_booking_is_final.sql"
+    - "internal/store/repository_test.go (diff)"
+    - "internal/store/schema_test.go (diff)"
+    - "api/openapi.yaml (bookings paths, ErrorCode)"
+    - "meta/architecture/decisions/adr/0010-cancelled-is-final-schema-guard.md"
+    - "all four package READMEs touched"
+  not_reached:
+    - "internal/httpapi/api.gen.go (generated, trusted)"
+  confidence: high
+  executed: "go build, go vet, go test ./..., go test -race ./internal/..., named AC/EC tests run individually: all green on ec8706f"
+
+metrics:
+  diff: { files: 18, added: 841, removed: 20 }
+  max_fan_in: { symbol: "booking.Booking", callers: 22 }
+  tests_cover_change: true
+  hotspots: ["internal/httpapi/server.go"]
+  cochange_missing: []
+  unmeasured:
+    fan_in_migration_0002: "no_eligible_fact — no_symbol_extractor for internal/store/migrations/0002_cancelled_booking_is_final.sql"
+    reverse_deps_internal_store_migrations: "no_eligible_fact — no_recipe: stack 'unknown' declares no reverse-dependency command"
+    cochange_missing: "no_eligible_fact — co_change_truncated: true; the code co-change peers (api_test.go, unimplemented.go, repository.go, repository_test.go) are all in this diff; meta/kanban peers are bookkeeping, not code"
+
+system_contract:
+  rules_checked: 11
+  holds: 7
+  unchecked: 4
+  violated: 0
+  verdicts:
+    - "ADR-0010/R1 ✓ holds — TestBooking_CannotReactivate green on ec8706f (domain guard + schema trigger through HTTP plumbing, 409 booking_cancelled, B1 stays cancelled); also TestSchema_RejectsCancelledToActiveTransition and TestProperty_Booking_CancelledNeverBecomesActive (30 seeded trials incl. upsert DO UPDATE and multi-row UPDATE)"
+    - "ADR-0012/R1 ✓ holds — internal/store/repository.go UpdateBookingStatus is one QueryRowContext UPDATE ... RETURNING, GetBooking one SELECT; no BeginTx in the diff; Service.Cancel issues no read before the update"
+    - "ADR-0013/R1 ✓ holds — no time.Now and no time read in the diff's production code; slot_start read back only via fromEpoch (repository.go scanBooking)"
+    - "ADR-0015/R1 ✓ holds — the diff touches no key or name comparison; booking id matched by WHERE id = ? (BINARY collation, byte for byte); slot identity untouched"
+    - "CON-007 ✓ holds — same evidence as ADR-0012/R1: single autocommit UPDATE ... RETURNING / SELECT, no read-then-write transaction"
+    - "CON-008 ✓ holds — instants scanned as int64 and converted by fromEpoch; RFC 3339 only in bookingToAPI at the API boundary; no clock use added"
+    - "INV-001 ⚠ unchecked — check_ref_missing: TestBookSlot_SlotTakenStoresNothingUnderNewKey; the other four refs (TestBookSlot_50ConcurrentRequestsExactlyOneWins, TestBookSlot_RejectsAlreadyBookedSlot, TestBookSlot_SameStartOnAnotherResourceIsNotTheSameSlot, TestProperty_Booking_NoOverlapUnderConcurrency) green on ec8706f; manual read: the diff does not touch the insert path or the active-slot index, and the trigger only blocks leaving cancelled"
+    - "INV-002 ⚠ unchecked — check_ref_missing: TestBookSlot_AcceptsSlotStartingExactlyNow, TestBookSlot_RejectsSlotInThePast, TestBookSlot_RejectsSlotOutsideWorkingHours, TestBookSlot_RejectsSlotStartingOneSecondBeforeNow, TestBookSlot_UnknownKeyForPastSlotIsRejectedAsPast (later cards); manual read of this diff found no change to booking acceptance"
+    - "INV-003 ⚠ unchecked — check_ref_missing: e.g. TestBookSlot_RepeatReturnsOriginalBooking, TestProperty_Booking_IdempotentUnderRetry, TestBookSlot_RepeatAfterCancelReturnsCancelledOriginal (CARD-005 replay, not landed); manual read of this diff found no change to idempotency-key handling"
+    - "INV-004 ⚠ unchecked — check_ref_missing: TestBookSlot_RepeatAfterCancelCreatesNoNewBooking (CARD-005 replay); the other four refs (TestBooking_CancelledStaysCancelled, TestBooking_CannotReactivate, TestBooking_NewBookingAfterCancelCreatesNewId, TestSchema_RejectsCancelledToActiveTransition) green on ec8706f; manual read found no violation"
+    - "INV-005 ✓ holds — all eight TestCreateResource_* refs exist in internal/httpapi/resources_test.go and are green on ec8706f; the diff does not touch internal/catalog"
+
+root_causes: []
+
+findings:
+  - id: F-001
+    severity: low
+    category: tech-debt
+    type: risk
+    file: internal/httpapi/server.go
+    line: 118
+    title: "409 booking_cancelled is answered on operations that do not declare it"
+    description: |
+      writeResponseError maps any handler error wrapping booking.ErrBookingCancelled to 409
+      booking_cancelled for every operation, but no operation in api/openapi.yaml declares a 409
+      response for bookings/{bookingId} or bookings/{bookingId}/cancel (they declare 200/404/500).
+      The ErrorCode enum declares booking_cancelled (409) and ADR-0010 asks for a stable mapping
+      even though no public route can trigger it, so this is unreachable in production today; if
+      it ever fires it is a response outside the declared operation contract.
+    suggestion: |
+      Accept as is (ADR-0010 consequence), or when the contract next changes declare the 409 on
+      the operations that can reach it. No change to api/ is allowed on this card.
+    confidence: high
+    source: static
+    violates: null
+    root_cause: null
+    status: open
+  - id: F-002
+    severity: low
+    category: tech-debt
+    type: gap
+    file: internal/booking/booking.go
+    line: 49
+    title: "Domain guard Booking.WithStatus has no production caller"
+    description: |
+      WithStatus is referenced only from tests; Service.Cancel calls
+      Repository.UpdateBookingStatus directly, and that port accepts any target status, so the
+      domain guard is not on any write path. ADR-0010's "a violation is normally caught before
+      reaching the database" holds only because no production path requests a non-cancelled
+      target. Behaviour is correct (the schema trigger stops it); the guard is declarative.
+    suggestion: |
+      Optional: narrow the port to a cancel-only operation, or route future status writes through
+      WithStatus. Not required by any AC.
+    confidence: high
+    source: static
+    violates: null
+    root_cause: null
+    status: open
+  - id: F-003
+    severity: info
+    category: compliance
+    type: question
+    file: internal/httpapi/bookings.go
+    line: 31
+    title: "GetBooking returns customer name and idempotency key to anyone holding the id"
+    description: |
+      Out of scope: the Booking response shape is the contract's (pre-existing bookingToAPI), and
+      unauthenticated access by id is CON-006 with DEC-011 open. Noted for the DEC-011 discussion.
+    suggestion: "Track under DEC-011; no change on this card."
+    confidence: medium
+    source: model
+    violates: null
+    root_cause: null
+    status: open
+
+minor_triage:
+  sampled: 2
+  total: 2
+  items:
+    - finding: "409 booking_cancelled is answered on operations that do not declare it"
+      should_gate: false
+      rationale: "Unreachable in production (no route requests reactivation) and mandated by ADR-0010's stable-error consequence; the contract cannot change on this card."
+    - finding: "Domain guard Booking.WithStatus has no production caller"
+      should_gate: false
+      rationale: "Design nit: the invariant is enforced by the schema trigger and tested end to end; the unused guard changes no behaviour."
