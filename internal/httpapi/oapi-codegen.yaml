@@ -1,0 +1,13 @@
+# Generator configuration for the server code of api/openapi.yaml (ADR-0009).
+# Regenerate with `go generate ./internal/httpapi`; the generator version is pinned by the
+# `tool` directive in go.mod.
+package: httpapi
+output: api.gen.go
+generate:
+  models: true
+  std-http-server: true
+  strict-server: true
+compatibility:
+  # Enum constants carry their type name (BookingStatusActive, WeekdayMonday, ErrorCodeSlotTaken)
+  # so values of different enums never collide in the package namespace.
+  always-prefix-enum-values: true
