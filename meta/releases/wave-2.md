@@ -12,6 +12,7 @@
 ## Convergence
 - ⚠ NOT converged — unmet: FR-005 (follow-up: CARD-007), FR-001 (follow-up: CARD-006). Every gap is a slice the decomposition already assigned to a later card; none is unassigned. Triage default (a) implementation gap — untriaged by a human (no interactive operator in this run).
 - UI gaps: none — backend-only HTTP API (UI surface: none), no frontend in scope.
+  ↳ FR-001 converged in wave 3 (2026-10-22)
 
 ## Wave checkpoint
 - Increment 1 checkpoint PASSED: `go test -run TestBookSlot_50ConcurrentRequestsExactlyOneWins ./...` on a fresh SQLite file, real binary as a subprocess — 1 × 201, 49 × 409 slot_taken, 0 lock/busy errors (also 20/20 with `-count=20`). Collapses ADR-0006, ADR-0008, ADR-0012, ASM-0006, ADR-0013, NFR-001 (uncertainty only). ADR-0012's `_txlock` fallback was not needed.

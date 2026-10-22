@@ -1,0 +1,131 @@
+version: 1
+generated_at: "2026-10-22T07:34:49Z"
+target: "card/006-resource-catalog (main...253e691)"
+overall_score: 9.0
+risk_level: low
+review_lane: fast
+reviewer: forge:review
+reviewer_version: "2026.10.10"
+model: "opus"
+
+task_contract_verdict: pass
+system_contract_verdict: pass
+overall_verdict: pass
+
+security: "applicable (0 findings)"
+
+coverage:
+  read:
+    - internal/catalog/catalog.go
+    - internal/catalog/catalog_test.go
+    - internal/catalog/property_test.go
+    - internal/httpapi/resources.go
+    - internal/httpapi/resources_test.go
+    - internal/httpapi/unimplemented.go
+    - internal/httpapi/api_test.go (diff + harness helpers)
+    - internal/store/repository.go
+    - internal/store/repository_test.go (diff)
+    - internal/store/migrations/0001 (schema)
+    - api/openapi.yaml (resource schemas and getResource)
+    - internal/catalog/README.md
+    - internal/store/README.md
+    - internal/httpapi/README.md
+    - internal/booking/property_test.go (catalog.Create caller)
+  not_reached:
+    - test execution (review is read-only; go build ./... and go vet ./... ran green on the worktree head)
+  confidence: high
+
+metrics:
+  diff: { files: 9, added: 749, removed: 25 }
+  max_fan_in: { symbol: "catalog.Interval", callers: 6 }
+  tests_cover_change: true
+  hotspots: []
+  cochange_missing: []
+  unmeasured:
+    hotspots: "no_eligible_fact — repository history is a few days old; churn/defect density not meaningful"
+    cochange_missing: "no_eligible_fact — young repository, co-change window carries no history for the touched files beyond CARD-003"
+
+system_contract:
+  rules_checked: 11
+  holds: 5
+  unchecked: 6
+  violated: 0
+  verdicts:
+    - "ADR-0010/R1 ⚠ unchecked — check_ref_missing: TestBooking_CannotReactivate (owned by CARD-005, absent on this branch); manual read of this diff found no change to booking status code or the booking table"
+    - "ADR-0012/R1 ✓ holds — review-lens: InsertBooking (internal/store/repository.go:20-33) is unchanged by the diff; the only new store code is single SELECT statements (repository.go:64-117); git diff main...HEAD --name-only shows no internal/booking path"
+    - "ADR-0013/R1 ✓ holds — review-lens: grep for time.Now in internal/catalog, internal/store/repository.go and internal/httpapi/resources.go finds none; the diff stores no instant (working-hours bounds are minutes of day, not instants)"
+    - "ADR-0015/R1 ⚠ unchecked — no_eligible_fact: the diff touches no idempotency key, customer name or slot identity code"
+    - "CON-007 ✓ holds — review-lens: same evidence as ADR-0012/R1; no booking write path code in the diff"
+    - "CON-008 ✓ holds — review-lens: no instant is stored or converted in the diff; no clock is read (grep time.Now: none in touched production files)"
+    - "INV-001 ⚠ unchecked — check_ref_missing: TestBookSlot_SlotTakenStoresNothingUnderNewKey (other refs exist); manual read: booking code and the active-slot unique index are untouched by the diff"
+    - "INV-002 ⚠ unchecked — check_ref_missing: TestBookSlot_AcceptsSlotStartingExactlyNow, TestBookSlot_RejectsSlotInThePast, TestBookSlot_RejectsSlotOutsideWorkingHours (owned by CARD-007); the diff only adds Catalog.Get as the future read path of working hours"
+    - "INV-003 ⚠ unchecked — check_ref_missing: e.g. TestBookSlot_RepeatReturnsOriginalBooking (owned by CARD-004/CARD-007); no idempotency code in the diff"
+    - "INV-004 ⚠ unchecked — check_ref_missing: TestBooking_CannotReactivate, TestBooking_CancelledStaysCancelled, TestSchema_RejectsCancelledToActiveTransition (owned by CARD-005); no cancellation code in the diff"
+    - "INV-005 ✓ holds — catalog.NewResource (internal/catalog/catalog.go:61-82) with Interval.validate (catalog.go:85-104) enforces name, >=1 interval, one per weekday, half-hour bounds, 0 <= start < end <= 1440; Catalog.Create (catalog.go:135-144) validates before InsertResource; all 8 named check tests exist in internal/httpapi/resources_test.go and assert 400 validation_error plus zero rows in both tables; property test TestProperty_Resource_AcceptsExactlyTheShapesOfInv005AndRoundTrips compares against an independent restatement (static read; tests not executed by the reviewer)"
+
+root_causes:
+  - id: RC-1
+    title: "Package READMEs not refreshed for the new catalog behaviour (outside the card's Touches globs)"
+    finding_ids: [F-001]
+
+findings:
+  - id: F-001
+    severity: low
+    category: tech-debt
+    type: gap
+    file: internal/catalog/README.md
+    line: 11
+    title: "catalog and store READMEs are stale after this diff"
+    description: |
+      internal/catalog/README.md:11 still says "The working-hours rules of INV-005 are not validated here yet
+      (CARD-006); until then the schema's constraints are the only backstop" — now false. Its key-entities table
+      omits NewResource, ErrInvalidResource, ErrNotFound, Catalog.List/Get. internal/store/README.md key-entities
+      row lists only InsertBooking/InsertResource, not ListResources/GetResource. In scope: caused by this diff
+      (behaviour of internal/catalog and internal/store changed); the README files are outside the card's
+      Touches globs, so the implementer could not edit them.
+    suggestion: |
+      Run forge:readme for internal/catalog and internal/store after merge (or widen Touches to the two READMEs).
+    confidence: high
+    source: static
+    violates: null
+    root_cause: RC-1
+    status: open
+    fixed_in: null
+    dismissed_reason: null
+    learned_pattern: null
+
+  - id: F-002
+    severity: low
+    category: tech-debt
+    type: risk
+    file: internal/catalog/property_test.go
+    line: 100
+    title: "INV-005 property test runs 3000 cases against a real SQLite store in the catalog unit tier"
+    description: |
+      The property test loops 3000 seeded cases (above the ~100-1000 budget of engineering-standards §6) and each
+      accepted case commits a transaction to a file-backed SQLite store opened via internal/store, so the domain
+      package's unit suite now depends on the store adapter and pays real fsync I/O on every run. The project has no
+      integration tier yet and other packages already use temp-file SQLite in unit tests, so this follows the
+      existing convention. In scope: evidence file is in the diff.
+    suggestion: |
+      Lower the case count to ~1000, or split: keep the accept/reject property in catalog against the in-memory
+      fakeRepo, and move the round-trip half to internal/store tests.
+    confidence: medium
+    source: static
+    violates: null
+    root_cause: null
+    status: open
+    fixed_in: null
+    dismissed_reason: null
+    learned_pattern: null
+
+minor_triage:
+  sampled: 2
+  total: 2
+  items:
+    - finding: "catalog and store READMEs are stale after this diff"
+      should_gate: false
+      rationale: "Documentation only, outside the card's Touches globs; no code or contract impact, routed to forge:readme."
+    - finding: "INV-005 property test runs 3000 cases against a real SQLite store in the catalog unit tier"
+      should_gate: false
+      rationale: "Suite-cost nit consistent with the project's current test convention; seeded, deterministic, no correctness impact."

@@ -1,6 +1,6 @@
 # CARD-004: Cancel a booking and keep cancellation final
 
-**Status:** ready
+**Status:** blocked
 **Priority:** P1
 **Category:** feature
 **Estimate:** 1c
@@ -10,7 +10,7 @@
 **Skill:** golang-pro
 **TDD:** —
 **Branch:** card/004-cancel-booking-final
-**Worktree:** —
+**Worktree:** /Users/romanmiakotin/go/src/github.com/adverax/booking-demo-CARD-004
 **Source:** meta/architecture/handoff.md#increment-2/cancellation
 **Idea:** — (no match in backlog-scored.yml)
 **Wave:** 3
@@ -19,11 +19,11 @@
 **UI surface:** none
 **Readiness:** 7/7
 **Review score:** —
-**Started:** —
+**Started:** 2026-10-22T07:17:36Z
 **Closed:** —
 **Actual:** —
 **Merge commit:** —
-**Blocked by:** —
+**Blocked by:** escalated — decompose: scope gate RUNAWAY — poaches serialized sibling CARD-006's Touches (0.67)
 
 ## What to implement
 
@@ -105,3 +105,24 @@ Revised since the last cut: ADR-0004 (24:00 interval end) and ADR-0006 (`_txlock
 ## Worktree notes
 
 Open decisions touching this card (do not answer them here): DEC-017 (a cancel racing a booking of the same slot) is not covered by this card's ACs; DEC-014 (whether a no-op repeated cancel re-emits its event) is open; DEC-011 (leaked booking ids let anyone cancel) is open and CON-006 stands.
+- [Env] forge 2026.10.10
+- [Drift gate] ⚠ unprocessed external drift: internal/store/*.go, internal/store/migrations/** (meta/drift-pending.yml event 2026-10-22T06:30:37Z, range 5fdd66b..54118a9; drift.gate default warn)
+- [Run] 2026-10-22 dispatched by `run` (wave 3) on the still-open run 2026-10-21T17:24:03Z (journal tail stop_declared, not run_completed → reused per cmd-run resume 1a); dispatcher.state top-level `wave:` still reads 1 (no writer advances it), the active entry carries wave 3 and this card's Wave: 3 stands
+- [Conflict graph] predicted edge with CARD-006 (overlap 2/3 = 0.67 ≥ 0.3: internal/httpapi/**.go, internal/store/*.go) — CARD-004 (P1) runs first, CARD-006 starts after this card is merged
+- STRUCTURE: the booking status has ONE write path in the store, `UpdateBookingStatus(ctx, id, to)` on the `booking.Repository` port: a single autocommit `UPDATE booking SET status = ? WHERE id = ? RETURNING <columns>` (ADR-0012: no read-then-write; the RETURNING row is the answer, so a cancel is one statement). `Service.Cancel` is that call with `StatusCancelled`. The port takes a target status (not a cancel-only method) so the schema guard of ADR-0010 is reachable, mapped and tested through the adapter; no production caller passes `active` (NG-2).
+- STRUCTURE: cancelled-is-final lives twice (ADR-0010): `Booking.WithStatus(to)` is the aggregate's transition rule (domain guard, returns `ErrBookingCancelled`), and trigger `booking_cancelled_is_final` (migration `0002_cancelled_booking_is_final.sql`, `BEFORE UPDATE OF status ... WHEN OLD.status = 'cancelled' AND NEW.status <> 'cancelled'`, `RAISE(ABORT, 'booking_cancelled_is_final')`) is the data guard. The store recognises the abort by code SQLITE_CONSTRAINT_TRIGGER AND that message (`isCancelledIsFinal` in store.go, next to `IsUniqueViolation`), so a future trigger is not mistaken for it. Cancel does not call `WithStatus`: its target (cancelled) is allowed from every status, so a read before the UPDATE would only add a read-then-write window.
+- STRUCTURE: domain sentinels `booking.ErrNotFound` (store maps `sql.ErrNoRows`) and `booking.ErrBookingCancelled`; handlers map `ErrNotFound` to the generated 404 types. `ErrBookingCancelled` → 409 `booking_cancelled` is mapped once, in `writeResponseError` (server.go), because no operation of the contract declares a 409 for it (no operation requests reactivation, ASM-0001); every other handler error stays 500.
+- STRUCTURE: API tests of operations with path parameters validate against the spec through `apiEnv.validateAt(method, template, target, rec)` (cancel_test.go); the shared `conforms` looks up literal paths only and was left untouched. `apiEnv` and the booking property `env` now expose the opened `*store.Store` (field `store`).
+- AC-030 is exercised without a reactivation route (NG-2): `TestBooking_CannotReactivate` checks the domain guard on the read-back aggregate, then serves a test-only `reactivatingServer` (the real Server with its cancel operation replaced by `UpdateBookingStatus(active)` on the real store, skipping the domain guard) through the real `NewHandler`: the schema aborts, the store maps it, the plumbing answers 409 `booking_cancelled` (body validated against the `Error` schema), and GET B1 still reads cancelled.
+- Mutation check: with migration 0002 removed, TestSchema_RejectsCancelledToActiveTransition, TestStore_UpdateBookingStatusMapsTheSchemaGuard, TestBooking_CannotReactivate and TestProperty_Booking_CancelledNeverBecomesActive fail; restored.
+- Invariants of AGG-002 touched and their property tests: INV-004 → TestProperty_Booking_CancelledNeverBecomesActive (random sequences over domain/port/raw SQL/upsert attempts, slot free or re-booked; also asserts INV-001 count at the slot); EC-005 → TestProperty_Booking_RepeatedCancelIsIdempotent (1..10 cancels, sequential or concurrent). INV-001/INV-003 unchanged (existing properties green).
+- SCOPE+ internal/booking/README.md, internal/store/README.md, internal/store/migrations/README.md, internal/httpapi/README.md — factual updates for the new operations, migration 0002 and the 409 mapping (not .go files; next to the Touches globs).
+- Shared-file edits kept local: unimplemented.go lost ONLY GetBooking and CancelBooking (resource stubs untouched); api_test.go got one struct field, one constructor argument, and the two booking rows removed from TestServer_UnimplementedOperationsAreInternalError; repository.go only appended.
+- Summary: cancel by id (200, idempotent, same body on repeat; 404 not_found), read by id (200/404), migration 0002 trigger, store `UpdateBookingStatus`/`GetBooking`, domain `Cancel`/`Get`/`WithStatus`. Gates: `make build test vet` green; `go test -race` green for booking, store, httpapi; `go generate ./...` no drift; go.mod/go.sum and internal/catalog unchanged.
+- [Commit] e39372e — feat(booking): CARD-004 cancel a booking and keep cancellation final (staged via forge:commit stage_card_paths.py, exit 0; READMEs per SCOPE+ above).
+- [Scope] internal/booking/README.md, internal/booking/booking.go, internal/booking/booking_test.go, internal/booking/cancel_property_test.go, internal/booking/property_test.go, internal/httpapi/README.md, internal/httpapi/api_test.go, internal/httpapi/bookings.go, internal/httpapi/cancel_test.go, internal/httpapi/server.go, internal/httpapi/unimplemented.go, internal/store/README.md, internal/store/migrations/0002_cancelled_booking_is_final.sql, internal/store/migrations/README.md, internal/store/repository.go, internal/store/repository_test.go, internal/store/schema_test.go, internal/store/store.go
+- [Build gate] not reached — the scope gate runs at the TOP of the cycle and escalated first (the implementation agent reported `make build test vet` green, go test -race green on booking/store/httpapi, go generate no drift; not re-verified by the orchestrator)
+- [Scope poach] diff covers 0.67 of CARD-006's Touches (matched: internal/httpapi/**.go, internal/store/*.go)
+- [Scope gate] runaway: poached CARD-006 (internal/httpapi/**.go, internal/store/*.go, ratio 0.67); excess 3/18 = 0.17 (internal/booking/README.md, internal/httpapi/README.md, internal/store/README.md, SCOPE+ noted); comp_spread 0; guardrail_hits none; conflict.hotspots empty
+- [Escalated] 2026-10-22T07:26:56Z — scope gate RUNAWAY (cycle 1, before review): diff covers 67% of ready same-wave sibling CARD-006's Touches (internal/httpapi/**.go, internal/store/*.go); CARD-006 is the sibling serialized behind this card by the predicted conflict edge, so any implementation of CARD-004 inside its own Touches trips the poach rule; conflict.hotspots empty · station: decompose · route: decide at the decompose station whether internal/httpapi/**.go and internal/store/*.go are shared ground between CARD-004 and CARD-006 (seed conflict.hotspots — a human config decision) or re-slice Touches ownership, or let CARD-006 finish first so no ready sibling owns those globs; then /kanban unblock CARD-004 (returns to review) and /kanban review CARD-004 (rebase onto main first). Worktree ../booking-demo-CARD-004 and branch card/004-cancel-booking-final kept (head e39372e, unreviewed)
+- [Info] 2026-10-22T07:45Z — after CARD-006 merged (4c2cd96), a dry-run `git merge-tree --write-tree main card/004-cancel-booking-final` reports content conflicts in internal/httpapi/unimplemented.go, internal/store/README.md, internal/store/repository.go, internal/store/repository_test.go (api_test.go auto-merges); the rebase on unblock must keep BOTH sides (CARD-006 resource read methods + CARD-004 booking status/read methods; each side removed its own stubs from unimplemented.go) and re-run all gates. No ready sibling owns internal/httpapi/**.go or internal/store/*.go any more (CARD-006 done), so the poach condition behind this escalation is gone; unblocking remains a human decompose-station decision.
