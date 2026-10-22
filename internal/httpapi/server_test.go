@@ -337,3 +337,20 @@ func escape(s string) string {
 	}
 	return b.String()
 }
+
+// ASM-0005: the generated binder unescapes a path parameter once more after http.ServeMux; a
+// segment that decodes to an invalid escape ("%25zz" -> "%zz") fails there, and that failure is
+// answered 400 validation_error in the contract's shape, without reaching the handler.
+func TestNewHandler_MalformedPathParameterIsValidationError(t *testing.T) {
+	for _, target := range []string{"/resources/%25zz", "/resources/%25zz/availability?from=2026-11-02&to=2026-11-02", "/bookings/%25zz", "/bookings/%25zz/cancel"} {
+		method := http.MethodGet
+		if strings.HasSuffix(target, "/cancel") {
+			method = http.MethodPost
+		}
+		stub := &stubServer{}
+		assertError(t, serve(httpapi.NewHandler(stub), method, target, ""), http.StatusBadRequest, httpapi.ErrorCodeValidationError)
+		if stub.called != "" {
+			t.Fatalf("%s %s reached %q", method, target, stub.called)
+		}
+	}
+}
