@@ -1,1 +1,2 @@
 2026-10-21 wave-1 full-suite 0s FAIL (no card merged this wave: main carries no Go packages; vacuous run)
+2026-10-22 wave-1 full-suite 2s PASS (re-run at run resume, after CARD-001/CARD-002 merged by hand-driven unblock/done)
