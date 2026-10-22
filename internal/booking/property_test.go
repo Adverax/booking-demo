@@ -29,6 +29,7 @@ type env struct {
 	svc     *booking.Service
 	catalog *catalog.Catalog
 	db      *sql.DB
+	store   *store.Store
 }
 
 func newEnv(t *testing.T, now func() time.Time) *env {
@@ -44,7 +45,7 @@ func newEnv(t *testing.T, now func() time.Time) *env {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { db.Close() })
-	return &env{svc: booking.NewService(st, now), catalog: catalog.New(st), db: db}
+	return &env{svc: booking.NewService(st, now), catalog: catalog.New(st), db: db, store: st}
 }
 
 var fixedClock = func() time.Time { return time.Date(2026, 10, 26, 8, 0, 0, 0, time.UTC) }

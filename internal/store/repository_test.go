@@ -159,3 +159,66 @@ func TestStore_ResourceReadsReportStoreFailures(t *testing.T) {
 		t.Errorf("GetResource on a closed store: err = %v", err)
 	}
 }
+
+func TestStore_UpdateBookingStatusReturnsTheUpdatedBooking(t *testing.T) {
+	s := openTestStore(t)
+	insertResource(t, s.db, "r1")
+	ctx := context.Background()
+	stored := newBooking("b1", "r1", slotTime, "k1")
+	if err := s.InsertBooking(ctx, stored); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.UpdateBookingStatus(ctx, "b1", booking.StatusCancelled)
+	want := stored
+	want.Status = booking.StatusCancelled
+	if err != nil || got != want {
+		t.Fatalf("UpdateBookingStatus = %+v, %v; want %+v", got, err, want)
+	}
+	if read, err := s.GetBooking(ctx, "b1"); err != nil || read != want {
+		t.Fatalf("GetBooking = %+v, %v; want %+v", read, err, want)
+	}
+}
+
+// A cancelled booking frees its slot at once: a new active booking of the slot is accepted.
+func TestStore_CancelledBookingFreesTheSlot(t *testing.T) {
+	s := openTestStore(t)
+	insertResource(t, s.db, "r1")
+	ctx := context.Background()
+	if err := s.InsertBooking(ctx, newBooking("b1", "r1", slotTime, "k1")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.UpdateBookingStatus(ctx, "b1", booking.StatusCancelled); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.InsertBooking(ctx, newBooking("b2", "r1", slotTime, "k2")); err != nil {
+		t.Fatalf("slot of the cancelled booking is not free: %v", err)
+	}
+}
+
+// The schema's guard reaches the port as booking.ErrBookingCancelled, and nothing is changed.
+func TestStore_UpdateBookingStatusMapsTheSchemaGuard(t *testing.T) {
+	s := openTestStore(t)
+	insertResource(t, s.db, "r1")
+	if err := insertBooking(s.db, "b1", "r1", slot, "Ann", "k1", "cancelled"); err != nil {
+		t.Fatal(err)
+	}
+	_, err := s.UpdateBookingStatus(context.Background(), "b1", booking.StatusActive)
+	if !errors.Is(err, booking.ErrBookingCancelled) {
+		t.Fatalf("err = %v, want ErrBookingCancelled", err)
+	}
+	if got := bookingStatus(t, s.db, "b1"); got != "cancelled" {
+		t.Fatalf("status = %q, want cancelled", got)
+	}
+}
+
+func TestStore_UnknownBookingIsNotFound(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	if _, err := s.UpdateBookingStatus(ctx, "missing-id", booking.StatusCancelled); !errors.Is(err, booking.ErrNotFound) {
+		t.Errorf("UpdateBookingStatus: err = %v, want ErrNotFound", err)
+	}
+	if _, err := s.GetBooking(ctx, "missing-id"); !errors.Is(err, booking.ErrNotFound) {
+		t.Errorf("GetBooking: err = %v, want ErrNotFound", err)
+	}
+}

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The HTTP API of the booking service (COMP-001). The types and the `net/http` server interface are generated from the contract [`api/openapi.yaml`](../../api/openapi.yaml) (contract first, ADR-0009). `NewHandler` mounts the generated routes on `http.ServeMux` and makes every failure that happens before or around a handler answer in the contract's JSON error shape. `Server` implements the generated `StrictServerInterface` over the domain components; each operation lives in the file of its tag (`resources.go`, `bookings.go`), and operations whose card has not landed yet are in `unimplemented.go` and answer 500 `internal_error`.
+The HTTP API of the booking service (COMP-001). The types and the `net/http` server interface are generated from the contract [`api/openapi.yaml`](../../api/openapi.yaml) (contract first, ADR-0009). `NewHandler` mounts the generated routes on `http.ServeMux` and makes every failure that happens before or around a handler answer in the contract's JSON error shape. `Server` implements the generated `StrictServerInterface` over the domain components; each operation lives in the file of its tag (`resources.go`, `bookings.go`), and operations whose card has not landed yet are in `unimplemented.go` and answer 500 `internal_error`. A handler error wrapping `booking.ErrBookingCancelled` (cancelled is final, ADR-0010) is answered 409 `booking_cancelled`; every other handler error is 500 `internal_error`.
 
 ## Architecture
 

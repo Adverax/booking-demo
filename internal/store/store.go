@@ -75,6 +75,18 @@ func IsUniqueViolation(err error) bool {
 	return errors.As(err, &e) && e.Code() == sqlite3.SQLITE_CONSTRAINT_UNIQUE
 }
 
+// cancelledIsFinalMessage is the RAISE message of the trigger in migration 0002.
+const cancelledIsFinalMessage = "booking_cancelled_is_final"
+
+// isCancelledIsFinal reports whether err is the abort raised by the booking_cancelled_is_final
+// trigger (ADR-0010): a trigger constraint error carrying that trigger's message, so a future
+// trigger is not mistaken for it.
+func isCancelledIsFinal(err error) bool {
+	var e *sqlite.Error
+	return errors.As(err, &e) && e.Code() == sqlite3.SQLITE_CONSTRAINT_TRIGGER &&
+		strings.Contains(e.Error(), cancelledIsFinalMessage)
+}
+
 // dsn builds the driver connection string. The path is percent-encoded into
 // a file: URI so characters such as '?' and '#' stay part of the file name.
 func dsn(path string) string {

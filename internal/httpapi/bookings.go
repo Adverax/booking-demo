@@ -26,6 +26,33 @@ func (s *Server) BookSlot(ctx context.Context, req BookSlotRequestObject) (BookS
 	return BookSlot201JSONResponse(bookingToAPI(b)), nil
 }
 
+// GetBooking reads one booking in its current state, a cancelled one included (AC-029): 200 with
+// the booking, or 404 not_found.
+func (s *Server) GetBooking(ctx context.Context, req GetBookingRequestObject) (GetBookingResponseObject, error) {
+	b, err := s.bookings.Get(ctx, req.BookingId)
+	if errors.Is(err, booking.ErrNotFound) {
+		return GetBooking404JSONResponse{NotFoundJSONResponse{Code: ErrorCodeNotFound, Message: "no booking with this id"}}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return GetBooking200JSONResponse(bookingToAPI(b)), nil
+}
+
+// CancelBooking cancels a booking by its id alone, with no identity check (FR-007, CON-006): 200
+// with the cancelled booking, also when it was already cancelled, in the same shape (ADR-0003,
+// AC-048); 404 not_found for an unknown id (AC-027).
+func (s *Server) CancelBooking(ctx context.Context, req CancelBookingRequestObject) (CancelBookingResponseObject, error) {
+	b, err := s.bookings.Cancel(ctx, req.BookingId)
+	if errors.Is(err, booking.ErrNotFound) {
+		return CancelBooking404JSONResponse{NotFoundJSONResponse{Code: ErrorCodeNotFound, Message: "no booking with this id"}}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return CancelBooking200JSONResponse(bookingToAPI(b)), nil
+}
+
 func bookingToAPI(b booking.Booking) Booking {
 	return Booking{
 		Id:           b.ID,

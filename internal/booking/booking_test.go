@@ -43,6 +43,33 @@ func (r *fakeRepo) InsertBooking(_ context.Context, b Booking) error {
 	return nil
 }
 
+// UpdateBookingStatus and GetBooking answer from the saved bookings; the schema's guard is not
+// faked, the store's tests and the property tests prove it against SQLite.
+func (r *fakeRepo) UpdateBookingStatus(_ context.Context, id string, to Status) (Booking, error) {
+	if r.err != nil {
+		return Booking{}, r.err
+	}
+	for i := range r.saved {
+		if r.saved[i].ID == id {
+			r.saved[i].Status = to
+			return r.saved[i], nil
+		}
+	}
+	return Booking{}, ErrNotFound
+}
+
+func (r *fakeRepo) GetBooking(_ context.Context, id string) (Booking, error) {
+	if r.err != nil {
+		return Booking{}, r.err
+	}
+	for _, b := range r.saved {
+		if b.ID == id {
+			return b, nil
+		}
+	}
+	return Booking{}, ErrNotFound
+}
+
 var clock = func() time.Time { return time.Date(2026, 10, 26, 8, 0, 0, 0, time.UTC) }
 
 func TestService_BookStoresAnActiveBookingAtTheCanonicalStart(t *testing.T) {
@@ -82,5 +109,54 @@ func TestService_BookPassesOtherStoreErrorsThrough(t *testing.T) {
 	_, err := s.Book(context.Background(), Request{ResourceID: "r1", SlotStart: clock().Add(time.Hour)})
 	if !errors.Is(err, boom) || errors.Is(err, ErrSlotTaken) {
 		t.Fatalf("err = %v, want the store error and not ErrSlotTaken", err)
+	}
+}
+
+// The aggregate's transition rule (INV-004): every status may become cancelled, an active booking
+// may stay active, and a cancelled booking may become nothing but cancelled.
+func TestBooking_WithStatusKeepsCancelledFinal(t *testing.T) {
+	active := Booking{ID: "b1", Status: StatusActive}
+	cancelled := Booking{ID: "b1", Status: StatusCancelled}
+	for _, c := range []struct {
+		from    Booking
+		to      Status
+		want    Status
+		wantErr error
+	}{
+		{active, StatusCancelled, StatusCancelled, nil},
+		{active, StatusActive, StatusActive, nil},
+		{cancelled, StatusCancelled, StatusCancelled, nil},
+		{cancelled, StatusActive, StatusCancelled, ErrBookingCancelled},
+		{cancelled, Status("pending"), StatusCancelled, ErrBookingCancelled},
+	} {
+		got, err := c.from.WithStatus(c.to)
+		if !errors.Is(err, c.wantErr) || got.Status != c.want || got.ID != "b1" {
+			t.Errorf("%s.WithStatus(%s) = %+v, %v; want status %s, err %v", c.from.Status, c.to, got, err, c.want, c.wantErr)
+		}
+	}
+}
+
+func TestService_CancelSetsCancelledThroughTheRepository(t *testing.T) {
+	repo := &fakeRepo{saved: []Booking{{ID: "b1", Status: StatusActive}}}
+	b, err := NewService(repo, clock).Cancel(context.Background(), "b1")
+	if err != nil || b.ID != "b1" || b.Status != StatusCancelled || repo.saved[0].Status != StatusCancelled {
+		t.Fatalf("Cancel = %+v, %v; stored %+v", b, err, repo.saved)
+	}
+}
+
+func TestService_CancelAndGetReportUnknownIdAsNotFound(t *testing.T) {
+	s := NewService(&fakeRepo{}, clock)
+	if _, err := s.Cancel(context.Background(), "missing-id"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("Cancel: err = %v, want ErrNotFound", err)
+	}
+	if _, err := s.Get(context.Background(), "missing-id"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("Get: err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestService_CancelPassesTheSchemaGuardThrough(t *testing.T) {
+	s := NewService(&fakeRepo{err: fmt.Errorf("store: %w", ErrBookingCancelled)}, clock)
+	if _, err := s.Cancel(context.Background(), "b1"); !errors.Is(err, ErrBookingCancelled) {
+		t.Fatalf("err = %v, want ErrBookingCancelled", err)
 	}
 }
