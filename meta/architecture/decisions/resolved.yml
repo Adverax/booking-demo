@@ -99,3 +99,13 @@ resolved:
     resolved_by: ADR-0020
     resolution_label: validate_first_replay_check_on_past_rejection
     date: 2026-10-21
+  - id: DEC-018
+    question: "Category of NFR-001 (50 simultaneous bookings)"
+    resolved_by: ADR-0021
+    resolution_label: reclassify_as_correctness
+    date: 2026-10-22
+  - id: DEC-031
+    question: "How rule-to-test coverage is verified"
+    resolved_by: ADR-0022
+    resolution_label: record_verification_mechanism
+    date: 2026-10-22

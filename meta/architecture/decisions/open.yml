@@ -144,24 +144,6 @@ open:
     criteria_refs: [FR-005, FR-006, FR-007]
     status: open
     blocks: [none]
-  - id: DEC-018
-    question: >-
-      NFR-001 (50 simultaneous bookings, exactly one succeeds) is filed under the scalability category, but the brief frames it as a correctness release criterion with no load figure: keep that label, or reclassify it?
-    surfaced_from:
-      kind: ambiguity
-      ref: [NFR-001]
-    alternatives:
-      - label: keep_scalability_label
-        summary: "Keep NFR-001 under scalability as the closest fixed category."
-        pros: []
-        cons: []
-      - label: reclassify_as_correctness
-        summary: "Record it as a correctness release criterion and leave the scalability category open instead of marked covered."
-        pros: []
-        cons: []
-    criteria_refs: [NFR-001]
-    status: open
-    blocks: [none]
   - id: DEC-019
     question: >-
       The header rationale of contexts.yml justifies the single context partly with 'one team', 'one owner' and the one-binary, one-SQLite-store constraints, which are not grounded in the brief or are deployment-shaped rather than domain-language evidence: keep the rationale as written, or rewrite it to rest on the ubiquitous language and the same-transaction invariants INV-001/INV-002 only? Raised by the critic as contested.
@@ -232,24 +214,6 @@ open:
         pros: []
         cons: []
     criteria_refs: [CON-002, CON-004]
-    status: open
-    blocks: [none]
-  - id: DEC-031
-    question: >-
-      NFR-003 (every rule has a named test) and the NFR-001 release test (AC-031, 50 simultaneous HTTP requests) are mapped in trace.yml to production components that do not perform the check, and no element or ADR records the mechanism that does (a test-naming convention, a coverage check in CI, a release-test harness). Should the architecture record that mechanism (an ADR or a test-harness element), or stay outside the C4 model and be handled by the cards? Raised by the critic as contested.
-    surfaced_from:
-      kind: ambiguity
-      ref: [NFR-001, NFR-003, AC-031, AC-033]
-    alternatives:
-      - label: record_verification_mechanism
-        summary: "Record the mechanism in an ADR and show the release-test harness in the model."
-        pros: []
-        cons: []
-      - label: keep_outside_model
-        summary: "Treat tests as outside the C4 runtime model and let the delivery cards own the mechanism."
-        pros: []
-        cons: []
-    criteria_refs: [NFR-001, NFR-003]
     status: open
     blocks: [none]
   - id: DEC-033
