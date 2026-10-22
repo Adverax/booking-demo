@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project state
 
-A fresh Go project (module `github.com/adverax/booking-demo`, Go 1.26) used for a live demonstration of forge. The only input is the design brief in `docs/booking-service.md`; it is frozen, so do not widen its scope. There is no code yet. Update this file once real structure exists.
+A Go project (module `github.com/adverax/booking-demo`, `go 1.26.0` with `toolchain go1.26.10`) used for a live demonstration of forge. The only input is the design brief in `docs/booking-service.md`; it is frozen, so do not widen its scope. Architecture lives in `meta/architecture/` (ADRs in `decisions/adr/`, platform baseline in `platform.yml`, `handoff.md` is generated and untracked); delivery cards and the board live in `meta/kanban/`. Implemented so far: the OpenAPI contract with the generated server, the SQLite store with embedded migrations, and the walking skeleton (bootstrap, minimal resource creation, booking one slot). Later cards are on the board.
 
 ## Fixed decisions from the brief
 
@@ -19,10 +19,15 @@ Summary of `docs/booking-service.md`; read the brief for the full text.
 
 ## Commands
 
-- Build: `go build ./...`
-- Test all: `go test ./...`
+- Build, test, vet: `make build`, `make test`, `make vet` (or `go build ./...`, `go test ./...`, `go vet ./...`)
 - Single test: `go test ./path/to/pkg -run '^TestName$'`
-- Lint/vet: `go vet ./...`
+- Dependency audit: `make tools` once, then `make audit`. The target always exits 0, so read `.audit/govulncheck.status` and `.audit/licenses.status` (both must be `ok`) instead of the exit code. Licences must be allowlisted in `meta/audit-allowlist.json`.
+- Regenerate the API server after editing `api/openapi.yaml`: `go generate ./...` (no drift is allowed).
+- Run: `BOOKING_DB_PATH=<file> [BOOKING_ADDR=:8080] go run ./cmd/booking`
+
+## Architecture in brief
+
+One Go binary (`cmd/booking`) wiring `internal/httpapi` (server generated from `api/openapi.yaml`, ADR-0009), `internal/booking` and `internal/catalog` (domain and ports), and `internal/store` (SQLite through `modernc.org/sqlite`, embedded migrations applied at startup). Two properties span several files: the no-double-booking and idempotency invariants live in the schema as unique indexes (ADR-0008) and the booking write path is a single autocommit insert whose unique violation is classified by reading the stored booking (ADR-0011, ADR-0012); all instants are stored as integer UTC epoch seconds and the current time comes only from an injected clock (ADR-0013).
 
 ## Language
 
