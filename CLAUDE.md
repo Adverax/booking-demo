@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project state
 
-A Go project (module `github.com/adverax/booking-demo`, `go 1.26.0` with `toolchain go1.26.10`) used for a live demonstration of forge. The only input is the design brief in `docs/booking-service.md`; it is frozen, so do not widen its scope. Architecture lives in `meta/architecture/` (ADRs in `decisions/adr/`, platform baseline in `platform.yml`, `handoff.md` is generated and untracked); delivery cards and the board live in `meta/kanban/`. Implemented so far: the OpenAPI contract with the generated server, the SQLite store with embedded migrations, and the walking skeleton (bootstrap, minimal resource creation, booking one slot). Later cards are on the board.
+A Go project (module `github.com/adverax/booking-demo`, `go 1.26.0` with `toolchain go1.26.10`) used for a live demonstration of forge. The only input is the design brief in `docs/booking-service.md`; it is frozen, so do not widen its scope. Architecture lives in `meta/architecture/` (ADRs in `decisions/adr/`, platform baseline in `platform.yml`, `handoff.md` is generated and untracked); delivery cards and the board live in `meta/kanban/`. All nine delivery cards are merged: the API (resources, availability, booking, idempotent replay, cancellation) is complete against the brief, and the three release criteria are executable tests in `cmd/booking/release_test.go` (`TestRelease_*`). A systemd unit and environment sample for the single binary live in `deploy/`. Open design questions remain as DEC entries in `meta/architecture/decisions/open.yml`; they do not block the delivered scope.
 
 ## Fixed decisions from the brief
 
@@ -24,6 +24,7 @@ Summary of `docs/booking-service.md`; read the brief for the full text.
 - Dependency audit: `make tools` once, then `make audit`. The target always exits 0, so read `.audit/govulncheck.status` and `.audit/licenses.status` (both must be `ok`) instead of the exit code. Licences must be allowlisted in `meta/audit-allowlist.json`.
 - Regenerate the API server after editing `api/openapi.yaml`: `go generate ./...` (no drift is allowed).
 - Run: `BOOKING_DB_PATH=<file> [BOOKING_ADDR=:8080] go run ./cmd/booking`
+- Release criteria only: `go test -run TestRelease ./cmd/booking/`
 
 ## Architecture in brief
 
