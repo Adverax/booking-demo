@@ -32,3 +32,6 @@
 
 ## Smoke test
 - 2026-10-22, on main 9b25192 after the CARD-007 merge: `go build ./... && go test ./...` PASS (2s; merge-gate reuse not taken: target tree moved with the changelog commit, record cmd differs, working tree dirty); `make build test vet` PASS; `go test -count=1 -race ./...` PASS (5 packages); 162 top-level tests pass, 0 fail (77 subtests); TestBookSlot_50ConcurrentRequestsExactlyOneWins PASS; `make audit` govulncheck ok (0 findings), licenses ok (MIT ×5, BSD-3-Clause ×7, Apache-2.0 ×1).
+
+## Metrics snapshot
+- `capture.py --wave 5` exit 2, REFUSED: "the signal definitions registry is missing: meta/metrics/signal-definitions.yml" (ADR-0032). No snapshot written.
