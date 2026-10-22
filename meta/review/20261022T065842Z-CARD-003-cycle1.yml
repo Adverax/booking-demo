@@ -1,0 +1,220 @@
+version: 1
+generated_at: "2026-10-22T06:58:42Z"
+target: "card/003-walking-skeleton-book-slot (6aed539) vs main (6d2806c)"
+overall_score: 9.0
+risk_level: low
+review_lane: fast
+reviewer: forge:review
+reviewer_version: "2026.10.10"
+model: "opus"
+
+task_contract_verdict: pass
+system_contract_verdict: pass
+overall_verdict: pass
+
+security: applicable (0 findings)
+
+coverage:
+  read:
+    - cmd/booking/main.go
+    - cmd/booking/main_test.go
+    - internal/booking/booking.go
+    - internal/booking/booking_test.go
+    - internal/booking/property_test.go
+    - internal/catalog/catalog.go
+    - internal/httpapi/bookings.go
+    - internal/httpapi/handlers.go
+    - internal/httpapi/resources.go
+    - internal/httpapi/unimplemented.go
+    - internal/httpapi/api_test.go
+    - internal/httpapi/server.go
+    - internal/store/repository.go
+    - internal/store/store.go
+    - internal/store/epoch.go
+    - internal/store/migrations/0001_create_resource_and_booking.sql
+    - api/openapi.yaml (bookSlot, schema constraints)
+    - all 5 README diffs
+    - meta/kanban/cards/CARD-003.md
+  not_reached:
+    - internal/catalog/catalog_test.go (names only)
+    - internal/store/repository_test.go (names only)
+    - internal/httpapi/api.gen.go (generated; strict-handler decode path assumed from oapi-codegen)
+  confidence: high
+  tests_run: "go build/vet/test ./... green; go test -race -count=3 -run TestBookSlot_50ConcurrentRequestsExactlyOneWins ./cmd/booking green"
+
+metrics:
+  diff: { files: 19, added: 1763, removed: 5 }
+  max_fan_in: { symbol: "booking.Service.Book", callers: 1 }
+  tests_cover_change: true
+  hotspots: []
+  cochange_missing: []
+  impact_artifact: "meta/impact/impact-set-6d2806c8265c-6aed53903994-worktree.json"
+  unmeasured:
+    cmd/booking/main.go fan_in: "no_eligible_fact — package main, no exported symbols (impact_set no_exported_symbols)"
+    cochange_missing: "no_eligible_fact — every touched file is new in this diff (churn 1 commit each); no history to mine"
+    hotspots: "no_eligible_fact — all touched files have exactly one commit, defect density 0 by construction"
+
+system_contract:
+  rules_checked: 11
+  holds: 6
+  unchecked: 5
+  violated: 0
+  verdicts:
+    - "ADR-0010/R1 ⚠ unchecked — check_ref_missing: TestBooking_CannotReactivate (owned by CARD-004); manual read of this diff found no violation: it only INSERTs status 'active', adds no UPDATE/status-transition path"
+    - "ADR-0012/R1 ✓ holds — internal/store/repository.go:21-25 InsertBooking is one db.ExecContext, no BeginTx on the booking path (grep BeginTx in production code: only repository.go:39 InsertResource); TestProperty_Booking_ConcurrentWritersNeverSeeLockErrors and TestBookSlot_50ConcurrentRequestsExactlyOneWins green (re-run with -race -count=3)"
+    - "ADR-0013/R1 ✓ holds — slot_start written only via toEpoch (repository.go:25), STRICT INTEGER column; clock injected via booking.NewService (booking.go:87); grep time.Now|Since|Until in non-test Go under cmd/ internal/: only main.go:87 passing time.Now to NewService (the bootstrap); AST check in TestProperty_Booking_SlotStartStoredAsCanonicalEpochSeconds green"
+    - "ADR-0015/R1 ✓ holds — httpapi/bookings.go:14-19 passes CustomerName/IdempotencyKey unmodified to booking.Request, booking.go:100-107 copies them unmodified, store binds them as parameters into BINARY-collated columns; slot identity = (resource_id, canonical start) via booking_active_slot_uq; TestProperty_Booking_SlotIdentityIsResourceAndCanonicalStart green"
+    - "CON-007 ✓ holds — same evidence as ADR-0012/R1: single autocommit INSERT at repository.go:21-25, no read-then-write transaction on the booking write path"
+    - "CON-008 ✓ holds — RFC 3339 <-> time.Time only in httpapi (bookings.go:33-34 bookingToAPI .UTC()), time.Time -> epoch only via store toEpoch; clock injectable (booking.NewService)"
+    - "INV-001 ✓ holds — present named checks green: TestBookSlot_50ConcurrentRequestsExactlyOneWins (cmd/booking), TestBookSlot_RejectsAlreadyBookedSlot, TestBookSlot_SameStartOnAnotherResourceIsNotTheSameSlot (internal/httpapi/api_test.go), TestProperty_Booking_NoOverlapUnderConcurrency (internal/booking/property_test.go); enforcement is the partial unique index booking_active_slot_uq. Note: named ref TestBookSlot_SlotTakenStoresNothingUnderNewKey not yet written (later card); its property is asserted inline in TestBookSlot_RejectsAlreadyBookedSlot (key-bob row count 0)"
+    - "INV-002 ⚠ unchecked — check_ref_missing: TestBookSlot_AcceptsSlotStartingExactlyNow, TestBookSlot_RejectsSlotInThePast, TestBookSlot_RejectsSlotOutsideWorkingHours, TestBookSlot_RejectsSlotStartingOneSecondBeforeNow, TestBookSlot_UnknownKeyForPastSlotIsRejectedAsPast (owned by CARD-007); manual read: POST /bookings in this diff applies no working-hours or past-slot check, by the card's explicit scope (AC-015/016/017/020/050/051/057 -> CARD-007, 'adds no past-slot check') — left to its owning card, not broken by a change of existing behavior"
+    - "INV-003 ⚠ unchecked — check_ref_missing: all 17 named tests (owned by CARD-005); manual read: key uniqueness holds via booking_idempotency_key_uq (0 extra rows per repeated key), but a same-payload replay is answered 409 slot_taken instead of 200 — the declared Failure-matrix gap, ADR-0011 insert-then-classify is CARD-005's (TODO at booking.go:94-96)"
+    - "INV-004 ⚠ unchecked — check_ref_missing: TestBookSlot_RepeatAfterCancelCreatesNoNewBooking, TestBooking_CancelledStaysCancelled, TestBooking_CannotReactivate, TestBooking_NewBookingAfterCancelCreatesNewId, TestSchema_RejectsCancelledToActiveTransition (owned by CARD-004); manual read: diff adds no cancel or status-update path"
+    - "INV-005 ⚠ unchecked — check_ref_missing: all 8 named TestCreateResource_* tests (owned by CARD-006); manual read: POST /resources accepts an empty name or an empty weeklyHours list and persists the resource (resources.go:17-29, schema NOT NULL admits ''), and non-aligned/duplicate/>24:00 bounds reach the schema CHECK/PK as 500 — deferred by NG-1 to CARD-006, left to its owning card"
+
+root_causes: []
+
+findings:
+  - id: F-001
+    severity: low
+    category: tech-debt
+    type: risk
+    file: internal/httpapi/api_test.go
+    line: 297
+    title: "Test pins 201 for a non-aligned slotStart that the contract declares 400"
+    description: |
+      TestBookSlot_NormalisesSlotStartToCanonicalUTC books 09:17:42Z (api_test.go:301) and asserts 201
+      with slotStart 09:00:00Z. api/openapi.yaml (bookSlot description, Validation) declares a slotStart
+      not on the half hour as 400 validation_error. Flooring is the card's declared transitional
+      behavior (Failure matrix row 'non-aligned slotStart', CARD-007 rejects), but this test entrenches
+      it: CARD-007 must invert or delete it, and nothing in the test says so.
+    suggestion: |
+      Test normalisation with an aligned instant in another offset (11:00:00+02:00 -> 09:00:00Z), which
+      stays valid after CARD-007, or mark the non-aligned case as transitional with a CARD-007 reference.
+    confidence: high
+    source: static
+    violates: null
+    root_cause: null
+    status: open
+    fixed_in: null
+    dismissed_reason: null
+    learned_pattern: null
+  - id: F-002
+    severity: low
+    category: tech-debt
+    type: gap
+    file: meta/kanban/cards/CARD-003.md
+    line: 107
+    title: "Failure matrix misses the empty-string / absent-field rows of both POST operations"
+    description: |
+      No row declares what happens to empty customerName, empty idempotencyKey or absent fields on
+      POST /bookings (internal/httpapi/bookings.go:14-19 passes them through; the booking is stored,
+      201), nor empty name / empty weeklyHours on POST /resources (resources.go:17-29; resource stored
+      without hours, 201). Notable consequence: an empty key occupies the service-wide key index, so
+      every later empty-key request anywhere answers 409 slot_taken. The behavior is deferred in the
+      card's objectives (AC-052/DEC-016 -> CARD-007, NG-1 -> CARD-006) but the matrix does not record it.
+    suggestion: |
+      Add the two poison-input rows to the Failure matrix (current behavior + owning card); no code change.
+    confidence: high
+    source: static
+    violates: null
+    root_cause: null
+    status: open
+    fixed_in: null
+    dismissed_reason: null
+    learned_pattern: null
+  - id: F-003
+    severity: low
+    category: tech-debt
+    type: risk
+    file: cmd/booking/main_test.go
+    line: 28
+    title: "Real-binary and loopback-network tests run in the default unit tier"
+    description: |
+      TestMain builds the binary with `go build` and the tests drive it over loopback TCP with a SQLite
+      file, with no build tag (engineering-standards §6 'integration work in the unit tier'). Mitigating:
+      AC-019 explicitly requires starting the real binary, the harness has no integration tier
+      (Makefile has only `test`), and the measured cost is ~2 s.
+    suggestion: |
+      When forge:harness grows a test-integration target, move cmd/booking end-to-end tests behind it;
+      no change needed for this card.
+    confidence: medium
+    source: static
+    violates: null
+    root_cause: null
+    status: open
+    fixed_in: null
+    dismissed_reason: null
+    learned_pattern: null
+  - id: F-004
+    severity: low
+    category: tech-debt
+    type: risk
+    file: cmd/booking/main.go
+    line: 97
+    title: "Second stop signal during the drain is swallowed"
+    description: |
+      signal.NotifyContext's stop() is deferred to main's return, so after the first SIGINT/SIGTERM the
+      signal stays captured for the whole shutdownTimeout (10 s): a second Ctrl-C does not force-quit.
+    suggestion: |
+      Call stop() right after `case <-ctx.Done():` so a second signal gets the default (terminating) action.
+    confidence: high
+    source: static
+    violates: null
+    root_cause: null
+    status: open
+    fixed_in: null
+    dismissed_reason: null
+    learned_pattern: null
+  - id: F-005
+    severity: info
+    category: tech-debt
+    type: gap
+    file: api/openapi.yaml
+    line: 29
+    title: "Spec promises schema-keyword enforcement; no request-side validation exists yet (out of scope)"
+    description: |
+      openapi.yaml:29-31 says the service enforces minLength/pattern/enum with 400. Neither CARD-001
+      plumbing nor this diff validates requests against the spec (tests validate responses only).
+      Implementing it here would be NG-1 / CARD-007 scope. Out-of-scope observation.
+    suggestion: |
+      CARD-006/CARD-007 should wire request validation (kin-openapi is already in go.mod) or implement
+      the equivalent checks.
+    confidence: high
+    source: static
+    violates: null
+    root_cause: null
+    status: open
+    fixed_in: null
+    dismissed_reason: null
+    learned_pattern: null
+  - id: F-006
+    severity: info
+    category: tech-debt
+    type: question
+    file: internal/httpapi/unimplemented.go
+    line: 8
+    title: "GetBooking has no owning card in the plan (out of scope)"
+    description: |
+      The comment says no card of the current plan names GET /bookings/{id} (FR-007/AC-029). Planning
+      gap, not a defect of this diff.
+    suggestion: "Confirm a card owns FR-007/AC-029."
+    confidence: high
+    source: static
+    violates: null
+    root_cause: null
+    status: open
+    fixed_in: null
+    dismissed_reason: null
+    learned_pattern: null
+
+minor_triage:
+  sampled: 2
+  total: 4
+  items:
+    - finding: "Test pins 201 for a non-aligned slotStart that the contract declares 400"
+      should_gate: false
+      rationale: "Behavior is the card's declared transitional flooring (Failure matrix, CARD-007 owns rejection); the test only needs a clarifying adjustment, nothing is broken now."
+    - finding: "Failure matrix misses the empty-string / absent-field rows of both POST operations"
+      should_gate: false
+      rationale: "Documentation gap in the declaration; the behavior is already deferred elsewhere in the card (AC-052/DEC-016, NG-1), no code defect."
