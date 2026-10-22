@@ -1,0 +1,151 @@
+version: 1
+generated_at: "2026-10-22T09:32:38Z"
+target: "card/008-availability-search (main 47f7e15...HEAD debafba)"
+overall_score: 9.0
+risk_level: low
+review_lane: fast
+reviewer: forge:review
+reviewer_version: "2026.10.10"
+model: "opus"
+
+task_contract_verdict: pass
+system_contract_verdict: pass
+overall_verdict: pass
+
+security: applicable (0 findings)
+
+coverage:
+  read:
+    - "full diff main...HEAD (15 files, +942/-44)"
+    - "internal/availability/ (all files)"
+    - "internal/httpapi/availability.go, handlers.go, availability_test.go, the changed hunks of api_test.go and cancel_test.go, replay_test.go (newReplayEnv), bookings.go and resources.go (error-mapping pattern)"
+    - "internal/store/repository.go (ActiveBookingStarts), availability_test.go, migrations/0001 (booking_active_slot_uq)"
+    - "internal/catalog/catalog.go (Interval, NewResource, validate)"
+    - "internal/booking/booking.go (insideWorkingHours, read only, for the CARD-007 follow-up)"
+    - "api/openapi.yaml getAvailability operation"
+    - "meta/architecture/trace.yml (FR-003, FR-004), c4/components-booking.puml"
+    - "meta/kanban/cards/CARD-008.md implementer notes"
+  not_reached:
+    - "api/openapi.yaml components (Availability/Slot schemas) beyond what the contract-validated tests exercise"
+    - "docs/how-it-works/ (directory does not exist in this project)"
+  confidence: high
+  executed:
+    - "go build ./... ok; go vet ./... clean"
+    - "go test -count=1 ./... ok (6 packages) on debafba"
+    - "go test -count=1 -race ./internal/availability ./internal/httpapi ./internal/store ok"
+
+metrics:
+  diff: { files: 15, added: 942, removed: 44 }
+  max_fan_in: { symbol: "availability.FreeSlots", callers: 1 }
+  tests_cover_change: true
+  hotspots: []
+  cochange_missing: []
+  unmeasured:
+    cochange_missing: "no_eligible_fact — co_change_truncated: true; the code co-change peers in the impact set (internal/booking/*.go with httpapi) are excluded by guardrail G-1, and the remaining peers are in this diff or meta/kanban bookkeeping"
+    fan_in_cmd_booking_main: "no_eligible_fact — impact set reports no_exported_symbols for cmd/booking/main.go"
+    fan_in_unimplemented_go: "no_eligible_fact — impact set reports file_absent_at_head (file deleted by this diff)"
+
+system_contract:
+  rules_checked: 11
+  holds: 11
+  unchecked: 0
+  violated: 0
+  verdicts:
+    - "ADR-0010/R1 ✓ holds — TestBooking_CannotReactivate (internal/httpapi/cancel_test.go:231) exists and passes on debafba (go test -count=1 ./internal/httpapi); the diff only adds the availability argument to its NewServer call (cancel_test.go:249)"
+    - "ADR-0012/R1 ✓ holds — git diff main...HEAD -- internal/booking is empty; the only new statement is the read-only single autocommit SELECT in internal/store/repository.go:193-198 via s.db.QueryContext, no BeginTx"
+    - "ADR-0013/R1 ✓ holds — availability.go computes on t.Unix()/int64 seconds (utcDay, weekday, start := day + m*60); store converts via toEpoch/fromEpoch (repository.go:198,208); TestProperty_Availability_ReadsTimeOnlyThroughInjectedClock passes and AST-checks no time.Now/Since/Until in the package"
+    - "ADR-0015/R1 ✓ holds — slot identity in availability is resource_id = ? (SQL, repository.go:195) plus equality of canonical epoch starts (booked[start], availability.go:120-122); no idempotency-key or customer-name comparison is added or changed"
+    - "CON-007 ✓ holds — same evidence as ADR-0012/R1: booking write path untouched, new read is one autocommit SELECT"
+    - "CON-008 ✓ holds — RFC 3339 conversion happens only in internal/httpapi/availability.go:25-28 (Slot{Start: f.Start.UTC(), End: f.End.UTC()}); storage stays integer epoch seconds; availability reads no clock (AST check in property_test.go)"
+    - "INV-001 ✓ holds — no write path changed (internal/booking untouched, migrations untouched); the named tests TestBookSlot_50ConcurrentRequestsExactlyOneWins etc. exist and pass on debafba"
+    - "INV-002 ✓ holds — internal/booking/** not in the diff (G-1); named tests TestBookSlot_AcceptsSlotStartingExactlyNow, TestBookSlot_RejectsSlotInThePast, TestBookSlot_RejectsSlotOutsideWorkingHours, TestBookSlot_RejectsSlotStartingOneSecondBeforeNow, TestBookSlot_UnknownKeyForPastSlotIsRejectedAsPast exist and pass"
+    - "INV-003 ✓ holds — idempotency code untouched; all 17 named tests exist (grep 'func <name>(' in internal/) and pass on debafba"
+    - "INV-004 ✓ holds — TestBookSlot_RepeatAfterCancelCreatesNoNewBooking added by this diff (internal/httpapi/availability_test.go:215) asserts 1 booking and the slot free after a K1 repeat; the other four named tests exist and pass"
+    - "INV-005 ✓ holds — internal/catalog untouched; availability only reads Intervals and relies on the alignment INV-005 guarantees; the eight named TestCreateResource_* tests exist and pass"
+
+root_causes: []
+
+findings:
+  - id: F-001
+    severity: low
+    category: tech-debt
+    type: risk
+    file: internal/availability/availability.go
+    line: 117
+    title: "Interval semantics encoded a third time, as an enumeration that depends on half-hour alignment"
+    description: |
+      The CARD-007 follow-up asked whether availability introduces a third copy of the working-hours
+      rule. It does, in a different form: `for m := iv.Start; m < iv.End; m += slotMinutes` re-encodes
+      catalog.Interval's half-open [Start, End) reading with End = 24:00 (ADR-0004), next to
+      catalog.Interval.validate and booking.insideWorkingHours. It is correct today (the property test
+      TestProperty_Availability_ListsExactlyFreeSlotsInsideWorkingHours pins it against a containment
+      oracle over 300 random schedules), but it silently assumes INV-005 alignment: with a misaligned End
+      the loop would emit a slot crossing End. The implementer's note "no third copy of the
+      slot-containment predicate" is accurate only for the predicate, not for the interval semantics.
+    suggestion: |
+      In the follow-up card that resolves CARD-007's insideWorkingHours item, add one catalog-owned
+      operation (e.g. Interval.Slots or Resource.Contains) and have both booking and availability use it.
+      Not fixable here without touching internal/catalog (outside Touches) or internal/booking (G-1).
+    confidence: high
+    source: static
+    violates: null
+    root_cause: null
+    status: open
+    fixed_in: null
+    dismissed_reason: null
+    learned_pattern: null
+  - id: F-002
+    severity: low
+    category: tech-debt
+    type: gap
+    file: internal/availability/property_test.go
+    line: 172
+    title: "EC clock-independence AST check only matches the identifier `time`"
+    description: |
+      assertNoSystemClock flags a SelectorExpr only when X is an Ident named "time". An aliased import
+      (`import clk "time"`) or a dot-import would read the system clock without failing the
+      EC(ADR-0013/R1) test. The rest of the property (repeat-equality over ranges decades in the past)
+      would still catch a past filter, but not a clock read that does not change the output.
+    suggestion: |
+      Resolve the import path instead: collect the local names of imports whose path is "time" (and
+      fail on a dot-import), then match SelectorExpr against that set.
+    confidence: medium
+    source: static
+    violates: null
+    root_cause: null
+    status: open
+    fixed_in: null
+    dismissed_reason: null
+    learned_pattern: null
+  - id: F-003
+    severity: info
+    category: ops
+    type: gap
+    file: internal/httpapi/README.md
+    line: 17
+    title: "No runtime OpenAPI validation in the dev/e2e server (pre-existing, project-wide)"
+    description: |
+      Out of scope: the httpapi README states kin-openapi is used only in tests, so the dev/e2e server
+      validates no request/response against the spec. Pre-existing project decision, not caused by this
+      diff; the new endpoint's tests validate every response against the contract.
+    suggestion: |
+      Follow-up card if the project wants engineering-standards §2 point 7 enforced at runtime.
+    confidence: high
+    source: static
+    violates: null
+    root_cause: null
+    status: open
+    fixed_in: null
+    dismissed_reason: null
+    learned_pattern: null
+
+minor_triage:
+  sampled: 2
+  total: 2
+  items:
+    - finding: "Interval semantics encoded a third time, as an enumeration that depends on half-hour alignment"
+      should_gate: false
+      rationale: "Behaviour is correct and pinned by an oracle property test; centralizing needs catalog/booking edits outside this card's scope (G-1), so it belongs to the CARD-007 follow-up, not this merge."
+    - finding: "EC clock-independence AST check only matches the identifier `time`"
+      should_gate: false
+      rationale: "Test-robustness nit: no aliased time import exists in the package today, so the EC currently holds and the check is sufficient for the code as written."

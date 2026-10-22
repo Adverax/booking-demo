@@ -4,3 +4,4 @@
 2026-10-22 wave-3 full-suite 3s PASS (CARD-006 merged; CARD-004 escalated, unmerged)
 2026-10-22 wave-4 full-suite 3s PASS (CARD-005 merged)
 2026-10-22 wave-5 full-suite 2s PASS (CARD-007 merged; CARD-008 deferred)
+2026-10-22 wave-5 full-suite 4s PASS (CARD-008 merged; wave 5 continued after the deferral was lifted)

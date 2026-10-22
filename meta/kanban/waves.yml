@@ -24,7 +24,7 @@ waves:
     checkpoint: "for a resource with weekly working hours and one active booking, the availability for a seven-day range lists exactly the free half-hour slots, and a cancelled booking's slot reappears in the next query."
     collapses: [ASM-0002, ASM-0007, ADR-0004]
     rollback: "revert the increment's merges; it only adds read paths and validation over existing storage."
-    status: pending
+    status: passed
   - wave: 6
     increment: 4
     checkpoint: "`go test -run TestRelease ./...` passes: the full API works end to end against a fresh database, exactly one of 50 concurrent bookings wins, and every rule has at least one named test."
