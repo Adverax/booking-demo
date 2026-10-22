@@ -15,16 +15,6 @@ func (s *Server) CancelBooking(context.Context, CancelBookingRequestObject) (Can
 	return nil, errNotImplemented
 }
 
-// ListResources is CARD-006's.
-func (s *Server) ListResources(context.Context, ListResourcesRequestObject) (ListResourcesResponseObject, error) {
-	return nil, errNotImplemented
-}
-
-// GetResource is CARD-006's.
-func (s *Server) GetResource(context.Context, GetResourceRequestObject) (GetResourceResponseObject, error) {
-	return nil, errNotImplemented
-}
-
 // GetAvailability is CARD-008's.
 func (s *Server) GetAvailability(context.Context, GetAvailabilityRequestObject) (GetAvailabilityResponseObject, error) {
 	return nil, errNotImplemented

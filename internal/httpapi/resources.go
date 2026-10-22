@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -12,21 +13,54 @@ import (
 // CreateResource persists a resource and answers 201 with its generated id (FR-001, AC-001).
 //
 // Only what is needed to translate the wire format is checked here: a weekday from the enum and
-// bounds of the form HH:MM. The working-hours rules of INV-005 are CARD-006's.
+// bounds of the form HH:MM. The working-hours rules of INV-005 belong to the catalog; a violation
+// of them is answered 400 validation_error and nothing is stored.
 func (s *Server) CreateResource(ctx context.Context, req CreateResourceRequestObject) (CreateResourceResponseObject, error) {
+	invalid := func(err error) CreateResourceResponseObject {
+		return CreateResource400JSONResponse{ValidationErrorJSONResponse{Code: ErrorCodeValidationError, Message: err.Error()}}
+	}
 	hours := make([]catalog.Interval, 0, len(req.Body.WeeklyHours))
 	for _, wi := range req.Body.WeeklyHours {
 		iv, err := intervalFromAPI(wi)
 		if err != nil {
-			return CreateResource400JSONResponse{ValidationErrorJSONResponse{Code: ErrorCodeValidationError, Message: err.Error()}}, nil
+			return invalid(err), nil
 		}
 		hours = append(hours, iv)
 	}
 	r, err := s.catalog.Create(ctx, req.Body.Name, hours)
+	if errors.Is(err, catalog.ErrInvalidResource) {
+		return invalid(err), nil
+	}
 	if err != nil {
 		return nil, err
 	}
 	return CreateResource201JSONResponse(resourceToAPI(r)), nil
+}
+
+// ListResources answers 200 with every resource, in creation order (FR-002, AC-004).
+func (s *Server) ListResources(ctx context.Context, _ ListResourcesRequestObject) (ListResourcesResponseObject, error) {
+	rs, err := s.catalog.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]Resource, 0, len(rs))
+	for _, r := range rs {
+		items = append(items, resourceToAPI(r))
+	}
+	return ListResources200JSONResponse{Items: items}, nil
+}
+
+// GetResource answers 200 with one resource, or 404 not_found for an unknown id (FR-002, AC-005,
+// AC-006).
+func (s *Server) GetResource(ctx context.Context, req GetResourceRequestObject) (GetResourceResponseObject, error) {
+	r, err := s.catalog.Get(ctx, req.ResourceId)
+	if errors.Is(err, catalog.ErrNotFound) {
+		return GetResource404JSONResponse{NotFoundJSONResponse{Code: ErrorCodeNotFound, Message: "resource not found"}}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return GetResource200JSONResponse(resourceToAPI(r)), nil
 }
 
 var weekdays = map[Weekday]time.Weekday{

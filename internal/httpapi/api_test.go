@@ -312,8 +312,6 @@ func TestBookSlot_NormalisesSlotStartToCanonicalUTC(t *testing.T) {
 func TestServer_UnimplementedOperationsAreInternalError(t *testing.T) {
 	e := newAPIEnv(t)
 	for _, c := range []struct{ method, target string }{
-		{http.MethodGet, "/resources"},
-		{http.MethodGet, "/resources/r1"},
 		{http.MethodGet, "/resources/r1/availability?from=2026-11-02&to=2026-11-03"},
 		{http.MethodGet, "/bookings/b1"},
 		{http.MethodPost, "/bookings/b1/cancel"},

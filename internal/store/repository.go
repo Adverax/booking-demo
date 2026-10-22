@@ -60,3 +60,58 @@ func (s *Store) InsertResource(ctx context.Context, r catalog.Resource) (err err
 	}
 	return nil
 }
+
+// resourceRows selects every resource with its working hours, one row per interval, resources in
+// creation order (rowid) and each resource's intervals by weekday. A resource always has at least
+// one interval (InsertResource is all or nothing, INV-005), so the inner join loses none.
+const resourceRows = `SELECT r.id, r.name, h.weekday, h.start_minute, h.end_minute
+	FROM resource r JOIN resource_working_hours h ON h.resource_id = r.id`
+
+// ListResources returns every stored resource with its working hours, in creation order. It is a
+// single statement, so it reads one consistent snapshot.
+func (s *Store) ListResources(ctx context.Context) ([]catalog.Resource, error) {
+	rs, err := s.queryResources(ctx, resourceRows+" ORDER BY r.rowid, h.weekday")
+	if err != nil {
+		return nil, fmt.Errorf("store: list resources: %w", err)
+	}
+	return rs, nil
+}
+
+// GetResource returns the resource with the given id and its working hours, or an error wrapping
+// catalog.ErrNotFound.
+func (s *Store) GetResource(ctx context.Context, id string) (catalog.Resource, error) {
+	rs, err := s.queryResources(ctx, resourceRows+" WHERE r.id = ? ORDER BY h.weekday", id)
+	if err != nil {
+		return catalog.Resource{}, fmt.Errorf("store: get resource: %w", err)
+	}
+	if len(rs) == 0 {
+		return catalog.Resource{}, fmt.Errorf("store: get resource: %w", catalog.ErrNotFound)
+	}
+	return rs[0], nil
+}
+
+// queryResources runs a resourceRows query and folds consecutive rows of one resource into one
+// catalog.Resource. The result is never nil.
+func (s *Store) queryResources(ctx context.Context, query string, args ...any) ([]catalog.Resource, error) {
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	rs := []catalog.Resource{}
+	for rows.Next() {
+		var (
+			id, name string
+			iv       catalog.Interval
+		)
+		if err := rows.Scan(&id, &name, &iv.Weekday, &iv.Start, &iv.End); err != nil {
+			return nil, err
+		}
+		if n := len(rs); n == 0 || rs[n-1].ID != id {
+			rs = append(rs, catalog.Resource{ID: id, Name: name})
+		}
+		last := &rs[len(rs)-1]
+		last.WeeklyHours = append(last.WeeklyHours, iv)
+	}
+	return rs, rows.Err()
+}
