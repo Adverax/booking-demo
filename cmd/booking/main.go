@@ -83,8 +83,9 @@ func run(ctx context.Context, getenv func(string) string) (err error) {
 	if err != nil {
 		return err
 	}
+	cat := catalog.New(st)
 	srv := &http.Server{
-		Handler:           httpapi.NewHandler(httpapi.NewServer(catalog.New(st), booking.NewService(st, time.Now))),
+		Handler:           httpapi.NewHandler(httpapi.NewServer(cat, booking.NewService(st, cat, time.Now))),
 		ReadHeaderTimeout: readHeaderTimeout,
 		ReadTimeout:       readTimeout,
 		WriteTimeout:      writeTimeout,

@@ -65,7 +65,7 @@ func TestProperty_Booking_IdempotentUnderRetry(t *testing.T) {
 		resourceID := e.newResource(t)
 		req := booking.Request{
 			ResourceID:     resourceID,
-			SlotStart:      withinHalfHour(rng, base.Add(time.Duration(rng.IntN(8))*booking.SlotLength)),
+			SlotStart:      inAnyZone(rng, base.Add(time.Duration(rng.IntN(8))*booking.SlotLength)),
 			CustomerName:   nameVariants[rng.IntN(len(nameVariants))],
 			IdempotencyKey: fmt.Sprintf("retry-%d", iter),
 		}
@@ -85,7 +85,7 @@ func TestProperty_Booking_IdempotentUnderRetry(t *testing.T) {
 				want.Status = booking.StatusCancelled
 			}
 			again := req
-			again.SlotStart = withinHalfHour(rng, booking.CanonicalSlotStart(req.SlotStart)) // another spelling of the same slot
+			again.SlotStart = inAnyZone(rng, booking.CanonicalSlotStart(req.SlotStart)) // another spelling of the same slot
 			got, replayed, err := e.svc.Book(ctx, again)
 			if err != nil || !replayed || got != want {
 				t.Fatalf("iter %d repeat %d (clock %v): got %+v, replayed %v, err %v; want %+v replayed", iter, r, clock.now(), got, replayed, err, want)
@@ -159,7 +159,7 @@ func otherPayload(rng *rand.Rand, req booking.Request, resources []string) booki
 			out.ResourceID = resources[rng.IntN(len(resources))]
 		}
 		if rng.IntN(2) == 0 {
-			out.SlotStart = withinHalfHour(rng, base.Add(time.Duration(rng.IntN(8))*booking.SlotLength))
+			out.SlotStart = inAnyZone(rng, base.Add(time.Duration(rng.IntN(8))*booking.SlotLength))
 		}
 		if rng.IntN(2) == 0 {
 			out.CustomerName = nameVariants[rng.IntN(len(nameVariants))]
@@ -181,7 +181,7 @@ func TestProperty_Booking_KeyReuseWithDifferentPayloadCreatesNothing(t *testing.
 		resources := []string{e.newResource(t), e.newResource(t)}
 		req := booking.Request{
 			ResourceID:     resources[rng.IntN(2)],
-			SlotStart:      withinHalfHour(rng, base.Add(time.Duration(rng.IntN(8))*booking.SlotLength)),
+			SlotStart:      inAnyZone(rng, base.Add(time.Duration(rng.IntN(8))*booking.SlotLength)),
 			CustomerName:   "Ann",
 			IdempotencyKey: fmt.Sprintf("reuse-%d", iter),
 		}
@@ -264,7 +264,7 @@ func TestProperty_Booking_PayloadComparedByteForByte(t *testing.T) {
 	pick := func() booking.Request {
 		return booking.Request{
 			ResourceID:   resources[rng.IntN(2)],
-			SlotStart:    withinHalfHour(rng, base.Add(time.Duration(rng.IntN(3))*booking.SlotLength)),
+			SlotStart:    inAnyZone(rng, base.Add(time.Duration(rng.IntN(3))*booking.SlotLength)),
 			CustomerName: nameVariants[rng.IntN(len(nameVariants))],
 		}
 	}
@@ -284,7 +284,7 @@ func TestProperty_Booking_PayloadComparedByteForByte(t *testing.T) {
 		}
 		repeat := pick()
 		if rng.IntN(3) == 0 { // bias toward near misses and exact repeats
-			repeat.ResourceID, repeat.SlotStart = first.ResourceID, withinHalfHour(rng, orig.SlotStart)
+			repeat.ResourceID, repeat.SlotStart = first.ResourceID, inAnyZone(rng, orig.SlotStart)
 		}
 		repeat.IdempotencyKey = first.IdempotencyKey
 		same := repeat.ResourceID == first.ResourceID &&

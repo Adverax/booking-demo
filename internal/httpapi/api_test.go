@@ -60,7 +60,7 @@ func newAPIEnvWithClock(t *testing.T, now func() time.Time) *apiEnv {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { db.Close() })
-	srv := httpapi.NewServer(catalog.New(st), booking.NewService(st, now))
+	srv := httpapi.NewServer(catalog.New(st), booking.NewService(st, catalog.New(st), now))
 	return &apiEnv{t: t, handler: httpapi.NewHandler(srv), db: db, spec: loadSpec(t), store: st}
 }
 
@@ -299,13 +299,14 @@ func TestBookSlot_SameStartOnAnotherResourceIsNotTheSameSlot(t *testing.T) {
 	}
 }
 
-// A slot start with another offset and inside the half hour is stored and returned as the
-// canonical UTC half-hour start (ADR-0013, ADR-0015), and competes with that slot.
+// A slot start spelled with another offset is stored and returned as the canonical UTC half-hour
+// start (ADR-0013, ADR-0015), and competes with that slot. (A start off the half hour is rejected
+// since CARD-007, AC-017: TestBookSlot_RejectsNonAlignedStart.)
 func TestBookSlot_NormalisesSlotStartToCanonicalUTC(t *testing.T) {
 	e := newAPIEnv(t)
 	r := e.createResource("Dr. Lee", weekdayHours(monToFri, "09:00", "17:00"))
 	plus2 := time.FixedZone("+02:00", 2*3600)
-	rec := e.book(r.Id, time.Date(2026, 11, 2, 11, 17, 42, 0, plus2), "Ann", "key-ann") // 09:17:42Z
+	rec := e.book(r.Id, time.Date(2026, 11, 2, 11, 0, 0, 0, plus2), "Ann", "key-ann") // 09:00Z
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("book: %d %s", rec.Code, rec.Body)
 	}

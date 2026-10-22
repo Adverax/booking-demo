@@ -45,7 +45,8 @@ func newEnv(t *testing.T, now func() time.Time) *env {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { db.Close() })
-	return &env{svc: booking.NewService(st, now), catalog: catalog.New(st), db: db, store: st}
+	cat := catalog.New(st)
+	return &env{svc: booking.NewService(st, cat, now), catalog: cat, db: db, store: st}
 }
 
 var fixedClock = func() time.Time { return time.Date(2026, 10, 26, 8, 0, 0, 0, time.UTC) }
@@ -53,9 +54,15 @@ var fixedClock = func() time.Time { return time.Date(2026, 10, 26, 8, 0, 0, 0, t
 // base is a future canonical slot start relative to fixedClock: Monday 2026-11-02 09:00 UTC.
 var base = time.Date(2026, 11, 2, 9, 0, 0, 0, time.UTC)
 
+// newResource creates a resource open around the clock on every day, so working hours reject no
+// slot of the generators below; the working-hours rule has its own tests.
 func (e *env) newResource(t *testing.T) string {
 	t.Helper()
-	r, err := e.catalog.Create(context.Background(), "Dr. Lee", []catalog.Interval{{Weekday: time.Monday, Start: 0, End: 1440}})
+	var hours []catalog.Interval
+	for d := time.Sunday; d <= time.Saturday; d++ {
+		hours = append(hours, catalog.Interval{Weekday: d, Start: 0, End: catalog.EndOfDay})
+	}
+	r, err := e.catalog.Create(context.Background(), "Dr. Lee", hours)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,16 +95,23 @@ func (e *env) bookConcurrently(reqs []booking.Request) []error {
 	return errs
 }
 
-// withinHalfHour is a random instant inside the half-hour slot starting at slot, at a random
-// offset (seconds and nanoseconds) and in a random zone: a non-canonical spelling of that slot.
-func withinHalfHour(rng *rand.Rand, slot time.Time) time.Time {
-	off := time.Duration(rng.Int64N(int64(booking.SlotLength)))
-	zone := time.FixedZone("z", (rng.IntN(27)-12)*3600+rng.IntN(2)*1800)
-	return slot.Add(off).In(zone)
+// inAnyZone is the slot start slot spelled in a random zone, whole and half-hour offsets alike: a
+// non-canonical spelling of the same instant. Since CARD-007 a start must lie on the UTC half hour
+// (AC-017), so the instant is kept and only its spelling varies.
+func inAnyZone(rng *rand.Rand, slot time.Time) time.Time {
+	return slot.In(time.FixedZone("z", (rng.IntN(27)-12)*3600+rng.IntN(4)*900))
+}
+
+// offHalfHour is an instant inside the slot starting at slot but not its start: at least one
+// nanosecond and less than a half hour after it. Booking it is rejected (AC-017).
+func offHalfHour(rng *rand.Rand, slot time.Time) time.Time {
+	return slot.Add(1 + time.Duration(rng.Int64N(int64(booking.SlotLength)-1)))
 }
 
 // EC-001 / INV-001: for any set of concurrent booking requests over some slots of one resource, at
-// most one active booking exists per slot afterwards, and every slot that was asked for has one.
+// most one active booking exists per slot afterwards, and every slot that was asked for by a valid
+// request has one. Validation runs in front of the insert (CARD-007): requests with a start off the
+// half hour are mixed in, are rejected as invalid, and neither win nor block a slot.
 func TestProperty_Booking_NoOverlapUnderConcurrency(t *testing.T) {
 	rng := rand.New(rand.NewPCG(1, 1))
 	e := newEnv(t, fixedClock)
@@ -108,10 +122,16 @@ func TestProperty_Booking_NoOverlapUnderConcurrency(t *testing.T) {
 			slots[i] = base.Add(time.Duration(i) * booking.SlotLength)
 		}
 		reqs := make([]booking.Request, 2+rng.IntN(39))
+		valid := make([]bool, len(reqs))
 		for i := range reqs {
+			slot := slots[rng.IntN(len(slots))]
+			start := inAnyZone(rng, slot)
+			if valid[i] = rng.IntN(5) != 0; !valid[i] {
+				start = offHalfHour(rng, slot)
+			}
 			reqs[i] = booking.Request{
 				ResourceID:     resourceID,
-				SlotStart:      withinHalfHour(rng, slots[rng.IntN(len(slots))]),
+				SlotStart:      start,
 				CustomerName:   fmt.Sprintf("c%d", i),
 				IdempotencyKey: fmt.Sprintf("it%d-k%d", iter, i),
 			}
@@ -119,12 +139,18 @@ func TestProperty_Booking_NoOverlapUnderConcurrency(t *testing.T) {
 		errs := e.bookConcurrently(reqs)
 
 		asked := map[time.Time]bool{}
-		for _, r := range reqs {
-			asked[booking.CanonicalSlotStart(r.SlotStart)] = true
+		for i, r := range reqs {
+			if valid[i] {
+				asked[booking.CanonicalSlotStart(r.SlotStart)] = true
+			}
 		}
 		wins := 0
 		for i, err := range errs {
 			switch {
+			case !valid[i]:
+				if !errors.Is(err, booking.ErrInvalidRequest) {
+					t.Fatalf("iter %d request %d (off the half hour): err %v, want ErrInvalidRequest", iter, i, err)
+				}
 			case err == nil:
 				wins++
 			case !errors.Is(err, booking.ErrSlotTaken):
@@ -174,17 +200,20 @@ func TestProperty_Booking_ConcurrentWritersNeverSeeLockErrors(t *testing.T) {
 	}
 }
 
-// ADR-0013/R1: for any requested slot start and any injected clock value, the stored slot start is
-// the canonical UTC half-hour start as integer epoch seconds; and the booking logic has no other
-// source of the current time than the injected clock.
+// ADR-0013/R1: for any accepted slot start, in any zone's spelling, and any injected clock value not
+// after it, the stored slot start is the canonical UTC half-hour start as integer epoch seconds; and
+// the booking logic has no other source of the current time than the injected clock. (Since
+// CARD-007 a start off the half hour or before now is rejected, so the generator draws an aligned
+// start and a clock value at or before it.)
 func TestProperty_Booking_SlotStartStoredAsCanonicalEpochSeconds(t *testing.T) {
 	rng := rand.New(rand.NewPCG(3, 3))
 	var now time.Time // the injected clock's value, redrawn per case
 	e := newEnv(t, func() time.Time { return now })
 	for iter := range 200 {
-		now = time.Unix(rng.Int64N(4_102_444_800), rng.Int64N(1e9)) // 1970 .. 2100
+		slot := rng.Int64N(4_102_444_800/1800) * 1800 // 1970 .. 2100, on the half hour
+		now = time.Unix(rng.Int64N(slot+1), rng.Int64N(1e9))
 		resourceID := e.newResource(t)
-		requested := time.Unix(rng.Int64N(4_102_444_800), rng.Int64N(1e9)).In(time.FixedZone("z", (rng.IntN(27)-12)*3600+rng.IntN(4)*900))
+		requested := time.Unix(slot, 0).In(time.FixedZone("z", (rng.IntN(27)-12)*3600+rng.IntN(4)*900))
 
 		b, _, err := e.svc.Book(context.Background(), booking.Request{ResourceID: resourceID, SlotStart: requested, CustomerName: "c", IdempotencyKey: fmt.Sprintf("k%d", iter)})
 		if err != nil {
@@ -205,7 +234,13 @@ func TestProperty_Booking_SlotStartStoredAsCanonicalEpochSeconds(t *testing.T) {
 		}
 	}
 
-	// The only clock is the injected one: no production file of this package reads the system clock.
+	assertNoSystemClock(t)
+}
+
+// assertNoSystemClock fails when a production file of this package reads the system clock: the only
+// clock is the injected one (ADR-0013/R1).
+func assertNoSystemClock(t *testing.T) {
+	t.Helper()
 	for _, f := range productionFiles(t) {
 		ast.Inspect(f.file, func(n ast.Node) bool {
 			if sel, ok := n.(*ast.SelectorExpr); ok {
@@ -260,7 +295,7 @@ func TestProperty_Booking_SlotIdentityIsResourceAndCanonicalStart(t *testing.T) 
 		resources := []string{e.newResource(t), e.newResource(t)}
 		pick := func() (string, time.Time) {
 			slot := base.Add(time.Duration(rng.IntN(3)) * booking.SlotLength)
-			return resources[rng.IntN(2)], withinHalfHour(rng, slot)
+			return resources[rng.IntN(2)], inAnyZone(rng, slot)
 		}
 		r1, s1 := pick()
 		r2, s2 := pick()

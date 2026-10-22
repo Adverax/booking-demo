@@ -11,8 +11,10 @@ import (
 // booking in its current state when the key is replayed with the same payload (ADR-0002, ADR-0011);
 // 409 idempotency_key_conflict when the key is stored with another payload (ADR-0001); 409
 // slot_taken when the slot has an active booking under another key (AC-018, ADR-0008); 400
-// validation_error for a request rejected before anything is stored, such as an empty key
-// (ADR-0018). Instants cross this boundary as RFC 3339 and are converted to and from the domain's
+// validation_error for an empty key or customer name or a slot start not on the half hour
+// (ADR-0018, AC-017); 404 not_found for an unknown resource (AC-020); 422
+// slot_outside_working_hours (AC-015); 422 slot_in_past for a past slot with nothing stored under
+// its key (ADR-0016, ADR-0020). Nothing is stored on any error. Instants cross this boundary as RFC 3339 and are converted to and from the domain's
 // time.Time here only (CON-008).
 func (s *Server) BookSlot(ctx context.Context, req BookSlotRequestObject) (BookSlotResponseObject, error) {
 	b, replayed, err := s.bookings.Book(ctx, booking.Request{
@@ -24,6 +26,12 @@ func (s *Server) BookSlot(ctx context.Context, req BookSlotRequestObject) (BookS
 	switch {
 	case errors.Is(err, booking.ErrInvalidRequest):
 		return BookSlot400JSONResponse{ValidationErrorJSONResponse{Code: ErrorCodeValidationError, Message: err.Error()}}, nil
+	case errors.Is(err, booking.ErrUnknownResource):
+		return BookSlot404JSONResponse{NotFoundJSONResponse{Code: ErrorCodeNotFound, Message: "no resource with this id"}}, nil
+	case errors.Is(err, booking.ErrOutsideWorkingHours):
+		return BookSlot422JSONResponse{Code: ErrorCodeSlotOutsideWorkingHours, Message: "the slot is not inside the resource's working hours"}, nil
+	case errors.Is(err, booking.ErrSlotInPast):
+		return BookSlot422JSONResponse{Code: ErrorCodeSlotInPast, Message: "the slot starts before the current time"}, nil
 	case errors.Is(err, booking.ErrKeyConflict):
 		return BookSlot409JSONResponse{Code: ErrorCodeIdempotencyKeyConflict, Message: "the idempotency key is already used with a different payload"}, nil
 	case errors.Is(err, booking.ErrSlotTaken):
